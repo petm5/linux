@@ -1452,6 +1452,30 @@ ov13858_set_pad_format(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int ov13858_get_selection(struct v4l2_subdev *sd,
+				struct v4l2_subdev_state *state,
+				struct v4l2_subdev_selection *sel)
+{
+	struct ov13858 *ov13858 = to_ov13858(sd);
+	const struct ov13858_mode *mode = ov13858->cur_mode;
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+		sel->r.top = 0;
+		sel->r.left = 0;
+		sel->r.width = mode->width;
+		sel->r.height = mode->height;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int ov13858_get_skip_frames(struct v4l2_subdev *sd, u32 *frames)
 {
 	*frames = OV13858_NUM_OF_SKIP_FRAMES;
@@ -1578,6 +1602,7 @@ static const struct v4l2_subdev_pad_ops ov13858_pad_ops = {
 	.enum_mbus_code = ov13858_enum_mbus_code,
 	.get_fmt = ov13858_get_pad_format,
 	.set_fmt = ov13858_set_pad_format,
+	.get_selection = ov13858_get_selection,
 	.enum_frame_size = ov13858_enum_frame_size,
 };
 
