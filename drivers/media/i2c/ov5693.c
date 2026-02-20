@@ -88,7 +88,7 @@
 #define OV5693_FORMAT1_REG			CCI_REG8(0x3820)
 #define OV5693_FORMAT1_FLIP_VERT_ISP_EN		BIT(6)
 #define OV5693_FORMAT1_FLIP_VERT_SENSOR_EN	BIT(1)
-#define OV5693_FORMAT1_VBIN_EN			BIT(0)
+#define OV5693_FORMAT1_VBIN_EN			BIT(2)
 #define OV5693_FORMAT2_REG			CCI_REG8(0x3821)
 #define OV5693_FORMAT2_HDR_EN			BIT(7)
 #define OV5693_FORMAT2_FLIP_HORZ_ISP_EN		BIT(2)
@@ -815,7 +815,7 @@ static int ov5693_set_fmt(struct v4l2_subdev *sd,
 	struct ov5693_device *ov5693 = to_ov5693_sensor(sd);
 	const struct v4l2_rect *crop;
 	struct v4l2_mbus_framefmt *fmt;
-	unsigned int hratio, vratio;
+	unsigned int hratio, vratio, ratio;
 	unsigned int width, height;
 	unsigned int hblank;
 	int exposure_max;
@@ -833,18 +833,19 @@ static int ov5693_set_fmt(struct v4l2_subdev *sd,
 
 	/*
 	 * We can only support setting either the dimensions of the crop rect
-	 * or those dimensions binned (separately) by a factor of two.
+	 * or those dimensions binned by a factor of two.
 	 */
 	hratio = clamp_t(unsigned int,
 			 DIV_ROUND_CLOSEST(crop->width, width), 1, 2);
 	vratio = clamp_t(unsigned int,
 			 DIV_ROUND_CLOSEST(crop->height, height), 1, 2);
+	ratio = min_t(unsigned int, hratio, vratio);
 
 	fmt = __ov5693_get_pad_format(ov5693, state, format->pad,
 				      format->which);
 
-	fmt->width = crop->width / hratio;
-	fmt->height = crop->height / vratio;
+	fmt->width = crop->width / ratio;
+	fmt->height = crop->height / ratio;
 	fmt->code = MEDIA_BUS_FMT_SBGGR10_1X10;
 
 	format->format = *fmt;
@@ -854,10 +855,10 @@ static int ov5693_set_fmt(struct v4l2_subdev *sd,
 
 	mutex_lock(&ov5693->lock);
 
-	ov5693->mode.binning_x = hratio > 1;
-	ov5693->mode.inc_x_odd = hratio > 1 ? 3 : 1;
-	ov5693->mode.binning_y = vratio > 1;
-	ov5693->mode.inc_y_odd = vratio > 1 ? 3 : 1;
+	ov5693->mode.binning_x = ratio > 1;
+	ov5693->mode.inc_x_odd = ratio > 1 ? 3 : 1;
+	ov5693->mode.binning_y = ratio > 1;
+	ov5693->mode.inc_y_odd = ratio > 1 ? 3 : 1;
 
 	ov5693->mode.vts = __ov5693_calc_vts(fmt->height);
 
