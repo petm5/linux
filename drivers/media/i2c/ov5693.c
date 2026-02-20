@@ -378,7 +378,7 @@ static int ov5693_flip_horz_configure(struct ov5693_device *ov5693,
 	int ret;
 
 	ret = cci_update_bits(ov5693->regmap, OV5693_FORMAT2_REG, bits,
-			      enable ? bits : 0, NULL);
+			      enable ? 0 : bits, NULL);
 	if (ret)
 		return ret;
 
