@@ -316,7 +316,9 @@ static const struct cci_reg_sequence ov5693_global_regs[] = {
 	{CCI_REG8(0x5e10), 0x0c},
 	{CCI_REG8(0x3820), 0x00},
 	{CCI_REG8(0x3821), 0x1e},
-	{CCI_REG8(0x5041), 0x14}
+	{CCI_REG8(0x5041), 0x14},
+	/* Enable MIPI clock gate */
+	{CCI_REG8(0x4800), 0x20}
 };
 
 static const struct v4l2_rect ov5693_default_crop = {
