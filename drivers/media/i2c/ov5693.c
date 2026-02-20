@@ -561,7 +561,7 @@ static int ov5693_mode_configure(struct ov5693_device *ov5693)
 		  &ret);
 
 	/* Offset X */
-	cci_write(ov5693->regmap, OV5693_OFFSET_START_X_REG, 0, &ret);
+	cci_write(ov5693->regmap, OV5693_OFFSET_START_X_REG, 2, &ret);
 
 	/* Output Size X */
 	cci_write(ov5693->regmap, OV5693_OUTPUT_SIZE_X_REG, mode->format.width,
@@ -569,7 +569,7 @@ static int ov5693_mode_configure(struct ov5693_device *ov5693)
 
 	/* Crop End X */
 	cci_write(ov5693->regmap, OV5693_CROP_END_X_REG,
-		  mode->crop.left + mode->crop.width, &ret);
+		  mode->crop.left + mode->crop.width + 7, &ret);
 
 	/* Horizontal Total Size */
 	cci_write(ov5693->regmap, OV5693_TIMING_HTS_REG, OV5693_FIXED_PPL,
@@ -580,7 +580,7 @@ static int ov5693_mode_configure(struct ov5693_device *ov5693)
 		  &ret);
 
 	/* Offset Y */
-	cci_write(ov5693->regmap, OV5693_OFFSET_START_Y_REG, 0, &ret);
+	cci_write(ov5693->regmap, OV5693_OFFSET_START_Y_REG, 2, &ret);
 
 	/* Output Size Y */
 	cci_write(ov5693->regmap, OV5693_OUTPUT_SIZE_Y_REG, mode->format.height,
@@ -588,7 +588,7 @@ static int ov5693_mode_configure(struct ov5693_device *ov5693)
 
 	/* Crop End Y */
 	cci_write(ov5693->regmap, OV5693_CROP_END_Y_REG,
-		  mode->crop.top + mode->crop.height, &ret);
+		  mode->crop.top + mode->crop.height + 7, &ret);
 
 	/* Subsample X increase */
 	cci_write(ov5693->regmap, OV5693_SUB_INC_X_REG,
