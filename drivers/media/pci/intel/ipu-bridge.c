@@ -110,6 +110,11 @@ static const struct sensor_rotation_quirk dell_xps_quirks[] = {
 	{ "OVTI02C1" },
 };
 
+static const struct sensor_rotation_quirk microsoft_surface_quirks[] = {
+	{ "OVTID858" },
+	{ "OVTI5693" },
+};
+
 /*
  * DMI matches for laptops which have their sensor mounted upside-down
  * without reporting a rotation of 180° in neither the SSDB nor the _PLD.
@@ -128,6 +133,13 @@ static const struct dmi_system_id upside_down_sensor_dmi_ids[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 16 9640"),
 		},
 		.driver_data = (void *)dell_xps_quirks,
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, " Microsoft Corporation"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_SKU, "Surface_Pro_9_2038"),
+		},
+		.driver_data = (void *)microsoft_surface_quirks,
 	},
 	{} /* Terminating entry */
 };
