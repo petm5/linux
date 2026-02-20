@@ -102,6 +102,14 @@ static const struct ipu_sensor_config ipu_supported_sensors[] = {
 	IPU_SENSOR_CONFIG("XMCC0003", 1, 321468000),
 };
 
+struct sensor_rotation_quirk {
+	char* acpi_id;
+};
+
+static const struct sensor_rotation_quirk dell_xps_quirks[] = {
+	{ "OVTI02C1" },
+};
+
 /*
  * DMI matches for laptops which have their sensor mounted upside-down
  * without reporting a rotation of 180° in neither the SSDB nor the _PLD.
@@ -112,14 +120,14 @@ static const struct dmi_system_id upside_down_sensor_dmi_ids[] = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 13 9350"),
 		},
-		.driver_data = "OVTI02C1",
+		.driver_data = (void *)dell_xps_quirks,
 	},
 	{
 		.matches = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 16 9640"),
 		},
-		.driver_data = "OVTI02C1",
+		.driver_data = (void *)dell_xps_quirks,
 	},
 	{} /* Terminating entry */
 };
@@ -277,8 +285,14 @@ static u32 ipu_bridge_parse_rotation(struct acpi_device *adev,
 	const struct dmi_system_id *dmi_id;
 
 	dmi_id = dmi_first_match(upside_down_sensor_dmi_ids);
-	if (dmi_id && acpi_dev_hid_match(adev, dmi_id->driver_data))
-		return 180;
+	if (dmi_id) {
+		struct sensor_rotation_quirk *quirk;
+
+		for (quirk = dmi_id->driver_data; quirk->acpi_id; quirk++) {
+			if (acpi_dev_hid_match(adev, quirk->acpi_id))
+				return 180;
+		}
+	}
 
 	switch (ssdb->degree) {
 	case IPU_SENSOR_ROTATION_NORMAL:
