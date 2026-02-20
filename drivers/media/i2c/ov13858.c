@@ -82,6 +82,9 @@
 #define OV13858_TEST_PATTERN_ENABLE	BIT(7)
 #define OV13858_TEST_PATTERN_MASK	0xfc
 
+/* Flip and Mirror Control */
+#define OV13858_REG_FORMAT1		0x3820
+
 /* Number of frames to skip */
 #define OV13858_NUM_OF_SKIP_FRAMES	2
 
@@ -1221,6 +1224,38 @@ static int ov13858_enable_test_pattern(struct ov13858 *ov13858, u32 pattern)
 				 OV13858_REG_VALUE_08BIT, val);
 }
 
+static int ov13858_set_ctrl_hflip(struct ov13858 *ov13858, u32 enable)
+{
+	int ret;
+	u32 val;
+
+	ret = ov13858_read_reg(ov13858, OV13858_REG_FORMAT1,
+			       OV13858_REG_VALUE_08BIT, &val);
+	if (ret)
+		return ret;
+
+	return ov13858_write_reg(ov13858, OV13858_REG_FORMAT1,
+				OV13858_REG_VALUE_08BIT,
+				enable ? (val & ~BIT(3)) : (val | BIT(3)));
+
+}
+
+static int ov13858_set_ctrl_vflip(struct ov13858 *ov13858, u32 enable)
+{
+	int ret;
+	u32 val;
+
+	ret = ov13858_read_reg(ov13858, OV13858_REG_FORMAT1,
+			       OV13858_REG_VALUE_08BIT, &val);
+	if (ret)
+		return ret;
+
+	return ov13858_write_reg(ov13858, OV13858_REG_FORMAT1,
+				OV13858_REG_VALUE_08BIT,
+				enable ? val | BIT(4) : val & ~BIT(4));
+
+}
+
 static int ov13858_set_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct ov13858 *ov13858 = container_of(ctrl->handler,
@@ -1269,6 +1304,12 @@ static int ov13858_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_TEST_PATTERN:
 		ret = ov13858_enable_test_pattern(ov13858, ctrl->val);
+		break;
+	case V4L2_CID_HFLIP:
+		ov13858_set_ctrl_hflip(ov13858, ctrl->val);
+		break;
+	case V4L2_CID_VFLIP:
+		ov13858_set_ctrl_vflip(ov13858, ctrl->val);
 		break;
 	default:
 		ret = -EINVAL;
@@ -1633,6 +1674,12 @@ static int ov13858_init_controls(struct ov13858 *ov13858)
 				     V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(ov13858_test_pattern_menu) - 1,
 				     0, 0, ov13858_test_pattern_menu);
+
+	v4l2_ctrl_new_std(ctrl_hdlr, &ov13858_ctrl_ops,
+			  V4L2_CID_HFLIP, 0, 1, 1, 0);
+	v4l2_ctrl_new_std(ctrl_hdlr, &ov13858_ctrl_ops,
+			  V4L2_CID_VFLIP, 0, 1, 1, 0);
+
 	if (ctrl_hdlr->error) {
 		ret = ctrl_hdlr->error;
 		dev_err(ov13858->dev, "%s control init failed (%d)\n",
