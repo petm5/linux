@@ -1061,12 +1061,6 @@ static int vd55g_update_gpios(struct vd55g *sensor, unsigned long gpio_mask)
 				   gpio_val, &ret);
 	}
 
-	// gpio_val = (0x5 | BIT(4));
-	// vd55g_write(sensor, CCI_REG8(0x0467), gpio_val, &ret);
-	// vd55g_write(sensor, CCI_REG8(0x0468), gpio_val, &ret);
-	// vd55g_write(sensor, CCI_REG8(0x0469), gpio_val, &ret);
-	// vd55g_write(sensor, CCI_REG8(0x046a), gpio_val, &ret);
-
 	return ret;
 }
 
