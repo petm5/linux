@@ -1750,7 +1750,7 @@ static int vd55g_power_on(struct device *dev)
 
 	ret = vd55g_boot(sensor);
 	if (ret) {
-		dev_err(dev, "Sensor patch failed %d\n", ret);
+		dev_err(dev, "Sensor boot failed %d\n", ret);
 		goto disable_clock;
 	}
 
