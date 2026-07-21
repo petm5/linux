@@ -112,8 +112,7 @@
 #define VD55G_REG_Y_HEIGHT_OR_END(sensor, ctx) \
 	CCI_REG16_LE(vd55g_get_ctx_addr(sensor, REG_CTX_Y_HEIGHT_OR_END, ctx))
 #define VD55G_REG_GPIO_CTRL(sensor, ctx, led) \
-	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_GPIO_0_CTRL + led, ctx))
-#define VD55G_GPIO_MODE_FSYNC_OUT			0x00
+	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_GPIO_0_CTRL, ctx) + led)
 #define VD55G_GPIO_MODE_IN				0x01
 #define VD55G_GPIO_MODE_STROBE				0x02
 #define VD55G_REG_VT_MODE(sensor, ctx) \
