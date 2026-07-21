@@ -509,7 +509,6 @@ static inline int vd55g_get_ctx_addr(struct vd55g *sensor, enum vd55g_reg_id reg
 {
 	u16 base_addr = sensor->info->reg_map[reg];
 	u16 stride = sensor->info->reg_map[REG_CTX_STRIDE];
-	ctx = 0;
 
 	return base_addr + (stride * ctx);
 }
