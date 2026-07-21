@@ -277,6 +277,12 @@ enum vd55g_reg_id {
 	REG_MANUAL_ANALOG_GAIN,
 	REG_MANUAL_COARSE_EXPOSURE,
 	REG_MANUAL_DIGITAL_GAIN,
+	REG_APPLIED_COARSE_EXPOSURE,
+	REG_APPLIED_ANALOG_GAIN,
+	REG_APPLIED_DIGITAL_GAIN,
+	REG_AE_FORCE_COLDSTART,
+	REG_AE_COLDSTART_EXPOSURE_US,
+	REG_AE_COLDSTART_COARSE_EXPOSURE,
 	/* HDR-specific */
 	REG_NEXT_CTX,
 	REG_EXPOSURE_USE_CASES,
@@ -313,6 +319,11 @@ static const int vd55g0_reg_map[REG_MAX_INDEX] = {
 	[REG_MANUAL_ANALOG_GAIN] = VD55G0_REG_MANUAL_ANALOG_GAIN,
 	[REG_MANUAL_COARSE_EXPOSURE] = VD55G0_REG_MANUAL_COARSE_EXPOSURE,
 	[REG_MANUAL_DIGITAL_GAIN] = VD55G0_REG_MANUAL_DIGITAL_GAIN,
+	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x0064),
+	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x0066),
+	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x0068),
+	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x042c),
+	[REG_AE_COLDSTART_COARSE_EXPOSURE] = CCI_REG32_LE(0x042e),
 
 	/* Context properties */
 	[REG_CTX_STRIDE] = 0x30,
@@ -336,6 +347,11 @@ static const int vd55g1_reg_map[REG_MAX_INDEX] = {
 	[REG_MANUAL_ANALOG_GAIN] = VD55G1_REG_MANUAL_ANALOG_GAIN,
 	[REG_MANUAL_COARSE_EXPOSURE] = VD55G1_REG_MANUAL_COARSE_EXPOSURE,
 	[REG_MANUAL_DIGITAL_GAIN] = VD55G1_REG_MANUAL_DIGITAL_GAIN,
+	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x00e8),
+	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x00ea),
+	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x00ec),
+	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x0308),
+	[REG_AE_COLDSTART_EXPOSURE_US] = CCI_REG32_LE(0x0374),
 	[REG_NEXT_CTX] = VD55G1_REG_NEXT_CTX,
 	[REG_EXPOSURE_USE_CASES] = VD55G1_REG_EXPOSURE_USE_CASES,
 	[REG_EXPOSURE_MAX_COARSE] = VD55G1_REG_EXPOSURE_MAX_COARSE,
@@ -379,6 +395,7 @@ struct vd55g_chip_info {
 	bool bayer;
 	bool hdr;
 	bool absolute_endpoints;
+	bool ae_coldstart_exposure_in_us;
 };
 
 static const struct vd55g_chip_info vd55g0_chip_info = {
@@ -398,6 +415,7 @@ static const struct vd55g_chip_info vd55g0_chip_info = {
 	.bayer = false,
 	.hdr = false,
 	.absolute_endpoints = true,
+	.ae_coldstart_exposure_in_us = false,
 };
 
 static const struct vd55g_chip_info vd55g1_chip_info = {
@@ -417,6 +435,7 @@ static const struct vd55g_chip_info vd55g1_chip_info = {
 	.bayer = false,
 	.hdr = true,
 	.absolute_endpoints = false,
+	.ae_coldstart_exposure_in_us = true,
 };
 
 static const struct vd55g_chip_info vd65g4_chip_info = {
@@ -432,6 +451,7 @@ static const struct vd55g_chip_info vd65g4_chip_info = {
 	.bayer = true,
 	.hdr = true,
 	.absolute_endpoints = false,
+	.ae_coldstart_exposure_in_us = true,
 };
 
 struct vd55g {
@@ -833,10 +853,10 @@ static int vd55g_read_expo_cluster(struct vd55g *sensor)
 	u64 dgain = 0;
 	int ret = 0;
 
-	vd55g_read(sensor, VD55G1_REG_APPLIED_COARSE_EXPOSURE, &exposure,
+	vd55g_cci_read(sensor, REG_APPLIED_COARSE_EXPOSURE, &exposure,
 		    &ret);
-	vd55g_read(sensor, VD55G1_REG_APPLIED_ANALOG_GAIN, &again, &ret);
-	vd55g_read(sensor, VD55G1_REG_APPLIED_DIGITAL_GAIN, &dgain, &ret);
+	vd55g_cci_read(sensor, REG_APPLIED_ANALOG_GAIN, &again, &ret);
+	vd55g_cci_read(sensor, REG_APPLIED_DIGITAL_GAIN, &dgain, &ret);
 	if (ret)
 		return ret;
 
@@ -879,23 +899,29 @@ static int vd55g_update_exposure_target(struct vd55g *sensor, int index)
 static int vd55g_apply_cold_start(struct vd55g *sensor,
 				   struct v4l2_rect *crop)
 {
-	/*
-	 * Cold start register is a single register expressed as exposure time
-	 * in us. This differ from status registers being a combination of
-	 * exposure, digital gain, and analog gain, requiring the following
-	 * format conversion.
-	 */
-	unsigned int line_length = crop->width + sensor->hblank_ctrl->val;
-	unsigned int line_time_us = DIV_ROUND_UP(line_length * MEGA,
-						 sensor->pixel_clock);
-	u8 d_gain = DIV_ROUND_CLOSEST(sensor->dgain_ctrl->val, 1 << 8);
-	u8 a_gain = DIV_ROUND_CLOSEST(32, (32 - sensor->again_ctrl->val));
-	unsigned int expo_us = sensor->expo_ctrl->val * d_gain * a_gain *
-			       line_time_us;
-	int ret = 0;
+	int ret;
 
-	vd55g_write(sensor, VD55G1_REG_AE_FORCE_COLDSTART, 1, &ret);
-	vd55g_write(sensor, VD55G1_REG_AE_COLDSTART_EXP_TIME, expo_us, &ret);
+	if (sensor->info->ae_coldstart_exposure_in_us) {
+		/*
+		 * Cold start register is a single register expressed as exposure time
+		 * in us. This differ from status registers being a combination of
+		 * exposure, digital gain, and analog gain, requiring the following
+		 * format conversion.
+		 */
+		unsigned int line_length = crop->width + sensor->hblank_ctrl->val;
+		unsigned int line_time_us = DIV_ROUND_UP(line_length * MEGA,
+							 sensor->pixel_clock);
+		u8 d_gain = DIV_ROUND_CLOSEST(sensor->dgain_ctrl->val, 1 << 8);
+		u8 a_gain = DIV_ROUND_CLOSEST(32, (32 - sensor->again_ctrl->val));
+		unsigned int expo_us = sensor->expo_ctrl->val * d_gain * a_gain *
+				       line_time_us;
+		vd55g_cci_write(sensor, REG_AE_COLDSTART_EXPOSURE_US, expo_us, &ret);
+	} else {
+		unsigned int expo_lines = sensor->expo_ctrl->val;
+		vd55g_cci_write(sensor, REG_AE_COLDSTART_COARSE_EXPOSURE, expo_lines, &ret);
+	}
+
+	vd55g_cci_write(sensor, REG_AE_FORCE_COLDSTART, 1, &ret);
 
 	return ret;
 }
