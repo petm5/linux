@@ -344,16 +344,20 @@ struct vd55g_patch_header {
 	u8 major;
 } __packed;
 
+struct fw_revision_map {
+	u64 revision;
+	const char *fw_name;
+};
+
 struct vd55g_chip_info {
 	unsigned int id;
-	unsigned int revision;
 	const char *name;
 	const struct vd55g_mode *modes;
 	u16 num_modes;
 	const int *reg_map;
-	bool needs_patch;
+	const struct fw_revision_map *fw_maps;
+	u16 num_fw_maps;
 	bool needs_patch_boot;
-	const char *patch_fw_name;
 	u32 mipi_rate_min;
 	u32 mipi_rate_max;
 	u16 width;
@@ -364,16 +368,28 @@ struct vd55g_chip_info {
 	bool ae_coldstart_exposure_in_us;
 };
 
+static const struct fw_revision_map vd55g0_fw_maps[] = {
+	{ .revision = 0x1111, .fw_name = "vd55g0-cut1.bin" },
+	{ .revision = 0x1120, .fw_name = "vd55g0-cut2.bin" },
+};
+
+static const struct fw_revision_map vd55g1_fw_maps[] = {
+	{ .revision = 0x2020, .fw_name = "vd55g1.bin" },
+};
+
+static const struct fw_revision_map vd65g4_fw_maps[] = {
+	{ .revision = 0x3030, .fw_name = NULL },
+};
+
 static const struct vd55g_chip_info vd55g0_chip_info = {
 	.id = 0x53354730,
-	.revision = 0x1111,
 	.name = "vd55g0",
 	.modes = vd55g0_supported_modes,
 	.num_modes = ARRAY_SIZE(vd55g0_supported_modes),
 	.reg_map = vd55g0_reg_map,
-	.needs_patch = true,
+	.fw_maps = vd55g0_fw_maps,
+	.num_fw_maps = ARRAY_SIZE(vd55g0_fw_maps),
 	.needs_patch_boot = true,
-	.patch_fw_name = "vd55g0-cut1.bin",
 	.mipi_rate_min = VD55G0_MIPI_RATE_MIN,
 	.mipi_rate_max = VD55G0_MIPI_RATE_MAX,
 	.width = VD55G0_WIDTH,
@@ -386,14 +402,13 @@ static const struct vd55g_chip_info vd55g0_chip_info = {
 
 static const struct vd55g_chip_info vd55g1_chip_info = {
 	.id = 0x53354731,
-	.revision = 0x2020,
 	.name = "vd55g1",
 	.modes = vd55g1_supported_modes,
 	.num_modes = ARRAY_SIZE(vd55g1_supported_modes),
 	.reg_map = vd55g1_reg_map,
-	.needs_patch = true,
+	.fw_maps = vd55g1_fw_maps,
+	.num_fw_maps = ARRAY_SIZE(vd55g1_fw_maps),
 	.needs_patch_boot = false,
-	.patch_fw_name = "vd55g1.bin",
 	.mipi_rate_min = VD55G1_MIPI_RATE_MIN,
 	.mipi_rate_max = VD55G1_MIPI_RATE_MAX,
 	.width = VD55G1_WIDTH,
@@ -406,12 +421,12 @@ static const struct vd55g_chip_info vd55g1_chip_info = {
 
 static const struct vd55g_chip_info vd65g4_chip_info = {
 	.id = 0x53354733,
-	.revision = 0x3030,
 	.name = "vd65g4",
 	.modes = vd55g1_supported_modes,
 	.num_modes = ARRAY_SIZE(vd55g1_supported_modes),
 	.reg_map = vd55g1_reg_map,
-	.needs_patch = false,
+	.fw_maps = vd65g4_fw_maps,
+	.num_fw_maps = ARRAY_SIZE(vd65g4_fw_maps),
 	.width = VD55G1_WIDTH,
 	.height = VD55G1_HEIGHT,
 	.bayer = true,
@@ -1188,15 +1203,42 @@ static int vd55g_load_and_apply_patch(struct vd55g *sensor, const char *fw_name)
 	return 0;
 }
 
+static int vd55g_get_firmware_name(struct vd55g *sensor, u64 revision, const char **fw_name) {
+	for (int i = 0; i < sensor->info->num_fw_maps; i++) {
+		const struct fw_revision_map *map = &sensor->info->fw_maps[i];
+
+		if (map->revision == revision) {
+			*fw_name = map->fw_name;
+			return 0;
+		}
+	}
+
+	*fw_name = NULL;
+	return -ENOENT;
+}
+
 static int vd55g_boot(struct vd55g *sensor)
 {
 	int ret = 0;
+	u64 rev;
+	const char *fw_name;
 
-	if (sensor->info->needs_patch) {
-		vd55g_load_and_apply_patch(sensor, sensor->info->patch_fw_name);
+	ret = vd55g_read(sensor, VD55G_REG_REVISION, &rev, NULL);
+	if (ret)
+		return ret;
+
+	ret = vd55g_get_firmware_name(sensor, rev, &fw_name);
+	if (ret == -ENOENT) {
+		dev_err(sensor->dev, "Unsupported sensor revision 0x%x for sensor %s\n",
+			(u16)rev, sensor->info->name);
+		return -ENODEV;
 	}
 
-	if (!sensor->info->needs_patch || sensor->info->needs_patch_boot) {
+	if (fw_name) {
+		vd55g_load_and_apply_patch(sensor, fw_name);
+	}
+
+	if (!fw_name || sensor->info->needs_patch_boot) {
 		vd55g_write(sensor, VD55G_REG_BOOT, VD55G_BOOT_BOOT, &ret);
 		vd55g_poll_reg(sensor, VD55G_REG_BOOT, 0, &ret);
 		if (ret) {
@@ -1648,7 +1690,7 @@ unlock_state:
 static int vd55g_detect(struct vd55g *sensor)
 {
 	const struct vd55g_chip_info *info;
-	u64 rev, id;
+	u64 id;
 	int ret;
 
 	info = device_get_match_data(sensor->dev);
@@ -1666,16 +1708,6 @@ static int vd55g_detect(struct vd55g *sensor)
 	if (id != sensor->info->id) {
 		dev_err(sensor->dev, "Expected %s (0x%x), but detected mismatched sensor id 0x%x\n",
 			sensor->info->name, (u32)sensor->info->id, (u32)id);
-		return -ENODEV;
-	}
-
-	ret = vd55g_read(sensor, VD55G_REG_REVISION, &rev, NULL);
-	if (ret)
-		return ret;
-
-	if (rev != sensor->info->revision) {
-		dev_err(sensor->dev, "Unsupported sensor revision 0x%x for sensor %s\n",
-			(u16)rev, sensor->info->name);
 		return -ENODEV;
 	}
 
