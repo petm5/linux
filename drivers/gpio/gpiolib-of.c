@@ -606,6 +606,11 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 		 */
 		{ "fcs,int_n",	NULL,		"fcs,fusb302" },
 #endif
+#if IS_ENABLED(CONFIG_VIDEO_VD55G)
+		{ "vcore", "dvdd",  "st,vd55g1" },
+		{ "vddio", "dovdd", "st,vd55g1" },
+		{ "vana",  "avdd",  "st,vd55g1" },
+#endif
 	};
 	struct gpio_desc *desc;
 	const char *legacy_id;
