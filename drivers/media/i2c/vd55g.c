@@ -1023,8 +1023,8 @@ static int vd55g_set_framefmt(struct vd55g *sensor,
 		x_val = crop->left + crop->width - 1;
 		y_val = crop->top + crop->height - 1;
 	} else {
-		x_val = crop->left;
-		y_val = crop->top;
+		x_val = crop->width;
+		y_val = crop->height;
 	}
 
 	vd55g_write(sensor, VD55G_REG_X_START(sensor, 0), crop->left, &ret);
