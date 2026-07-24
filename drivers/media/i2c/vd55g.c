@@ -185,10 +185,10 @@ static const struct vd55g_mode vd55g0_supported_modes[] = {
 		.width = 640,
 		.height = 480,
 	},
-	// {
-	// 	.width = 320,
-	// 	.height = 240,
-	// },
+	{
+		.width = 320,
+		.height = 240,
+	},
 };
 
 static const struct vd55g_mode vd55g1_supported_modes[] = {
