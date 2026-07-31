@@ -198,6 +198,24 @@ static const struct int3472_gpio_map int3472_gpio_map[] = {
 		.con_id = "vana",
 		.enable_time_us = GPIO_REGULATOR_ENABLE_TIME,
 	},
+	{
+		.hid = "SMO55F0",
+		.type_from = INT3472_GPIO_TYPE_HANDSHAKE,
+		.type_to = INT3472_GPIO_TYPE_HANDSHAKE,
+		.con_id = "vcore",
+	},
+	{
+		.hid = "SMO55F0",
+		.type_from = INT3472_GPIO_TYPE_DOVDD,
+		.type_to = INT3472_GPIO_TYPE_DOVDD,
+		.con_id = "vddio",
+	},
+	{
+		.hid = "SMO55F0",
+		.type_from = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.type_to = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.con_id = "vana",
+	},
 };
 
 static bool int3472_gpio_map_hids_match(struct acpi_device *adev,
