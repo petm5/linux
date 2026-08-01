@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Driver for VD55G1 global shutter sensor family driver
+ * Driver for VD55G family global shutter sensors
  *
  * Copyright (C) 2025 STMicroelectronics SA
  */
@@ -56,6 +56,8 @@
 #define VD55G1_MASK_FRAME_CTRL_OUTPUT			0
 #define VD55G1_MASK_FRAME_CTRL_MASK			1
 
+#define VD55G0_WIDTH					644
+#define VD55G0_HEIGHT					604
 #define VD55G1_WIDTH					804
 #define VD55G1_HEIGHT					704
 #define VD55G1_MODE_DEF					0
@@ -74,6 +76,8 @@
 #define VD55G1_CTX_OFFSET				0x50
 #define VD55G1_XCLK_FREQ_MIN				(6 * HZ_PER_MHZ)
 #define VD55G1_XCLK_FREQ_MAX				(27 * HZ_PER_MHZ)
+#define VD55G0_MIPI_RATE_MIN				(750 * MEGA)
+#define VD55G0_MIPI_RATE_MAX				(1200 * MEGA)
 #define VD55G1_MIPI_RATE_MIN				(250 * MEGA)
 #define VD55G1_MIPI_RATE_MAX				(1200 * MEGA)
 
@@ -134,6 +138,51 @@ enum vd55g1_reg_id {
 	REG_CTX_EXPOSURE_INSTANCE,
 
 	REG_MAX_INDEX /* Keeps track of enum size */
+};
+
+static const int vd55g0_reg_map[REG_MAX_INDEX] = {
+	[REG_MODEL_ID] = CCI_REG32_LE(0x0000),
+	[REG_REVISION] = CCI_REG16_LE(0x0004),
+	[REG_FWPATCH_START_ADDR] = CCI_REG8(0x2000),
+	[REG_BOOT] = CCI_REG8(0x0200),
+	[REG_STBY] = CCI_REG8(0x0201),
+	[REG_STREAMING] = CCI_REG8(0x0202),
+	[REG_EXT_CLOCK] = CCI_REG32_LE(0x0220),
+	[REG_LINE_LENGTH] = CCI_REG16_LE(0x0300),
+	[REG_ORIENTATION] = CCI_REG8(0x0302),
+	[REG_FORMAT_CTRL] = CCI_REG8(0x030a),
+	[REG_OIF_CTRL] = CCI_REG16_LE(0x030c),
+	[REG_OIF_IMG_CTRL] = CCI_REG8(0x030f),
+	[REG_MIPI_DATA_RATE] = CCI_REG32_LE(0x0224),
+	[REG_SYSTEM_FSM] = CCI_REG8(0x002c),
+	[REG_ISL_ENABLE] = CCI_REG8(0x0329),
+	[REG_FWPATCH_REVISION] = CCI_REG16_LE(0x0022),
+	[REG_PATGEN_CTRL] = CCI_REG16_LE(0x0400),
+	[REG_READOUT_CTRL] = CCI_REG8(0x047a),
+	[REG_DUSTER_CTRL] = CCI_REG8(0x0316),
+	[REG_AE_TARGET_PERCENTAGE] = CCI_REG8(0x0440),
+	[REG_MANUAL_ANALOG_GAIN] = CCI_REG8(0x044d),
+	[REG_MANUAL_COARSE_EXPOSURE] = CCI_REG16_LE(0x044e),
+	[REG_MANUAL_DIGITAL_GAIN] = CCI_REG16_LE(0x0450),
+	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x0064),
+	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x0066),
+	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x0068),
+	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x042c),
+	[REG_AE_COLDSTART_COARSE_EXPOSURE] = CCI_REG32_LE(0x042e),
+	[REG_NEXT_CTX] = CCI_REG16_LE(0x0478),
+	[REG_EXPOSURE_MAX_COARSE] = CCI_REG16_LE(0x096c),
+	[REG_CTX_REPEAT_COUNT_CTX0] = CCI_REG16_LE(0x0476),
+	[REG_CTX_REPEAT_COUNT_CTX1] = CCI_REG16_LE(0x04a6),
+
+	/* Context properties */
+	[REG_CTX_STRIDE] = 0x30,
+	[REG_CTX_EXP_MODE] = CCI_REG8(0x044c),
+	[REG_CTX_FRAME_LENGTH] = CCI_REG32_LE(0x0458),
+	[REG_CTX_X_START] = CCI_REG16_LE(0x045e),
+	[REG_CTX_X_END] = CCI_REG16_LE(0x0460),
+	[REG_CTX_Y_START] = CCI_REG16_LE(0x0462),
+	[REG_CTX_Y_END] = CCI_REG16_LE(0x0464),
+	[REG_CTX_GPIO_0_CTRL] = CCI_REG8(0x0467),
 };
 
 static const int vd55g1_reg_map[REG_MAX_INDEX] = {
@@ -540,6 +589,25 @@ static const u32 vd55g1_mbus_formats_bayer[][4] = {
 	},
 };
 
+static const struct vd55g1_mode vd55g0_supported_modes[] = {
+	{
+		.width = VD55G0_WIDTH,
+		.height = VD55G0_HEIGHT,
+	},
+	{
+		.width = 640,
+		.height = 600,
+	},
+	{
+		.width = 640,
+		.height = 480,
+	},
+	{
+		.width = 320,
+		.height = 240,
+	},
+};
+
 static const struct vd55g1_mode vd55g1_supported_modes[] = {
 	{
 		.width = VD55G1_WIDTH,
@@ -598,10 +666,34 @@ struct vd55g1_rev_info {
 struct vd55g1_chip_info {
 	unsigned int id;
 	const char *name;
+	const struct vd55g1_mode *modes;
+	u16 num_modes;
 	const int *reg_map;
 	const struct vd55g1_rev_info *revisions;
 	u16 num_revisions;
+	u32 mipi_rate_min;
+	u32 mipi_rate_max;
+	u16 width;
+	u16 height;
 	bool bayer;
+	bool hdr;
+	bool absolute_endpoints;
+	bool ae_coldstart_exposure_in_us;
+	bool limit_flash_duty_cycle;
+	bool implicit_patch_boot;
+};
+
+static const struct vd55g1_rev_info vd55g0_revisions[] = {
+	{
+		.revision = 0x1111,
+		.needs_patch = true,
+		.fw_name = "vd55g0-cut1.bin"
+	},
+	{
+		.revision = 0x1120,
+		.needs_patch = true,
+		.fw_name = "vd55g0-cut2.bin"
+	},
 };
 
 static const struct firmware vd55g1_builtin_fw = {
@@ -621,22 +713,62 @@ static const struct vd55g1_rev_info vd65g4_revisions[] = {
 	{ .revision = 0x3030, .needs_patch = false },
 };
 
+static const struct vd55g1_chip_info vd55g0_chip_info = {
+	.id = 0x53354730,
+	.name = "vd55g0",
+	.modes = vd55g0_supported_modes,
+	.num_modes = ARRAY_SIZE(vd55g0_supported_modes),
+	.reg_map = vd55g0_reg_map,
+	.revisions = vd55g0_revisions,
+	.num_revisions = ARRAY_SIZE(vd55g0_revisions),
+	.mipi_rate_min = VD55G0_MIPI_RATE_MIN,
+	.mipi_rate_max = VD55G0_MIPI_RATE_MAX,
+	.width = VD55G0_WIDTH,
+	.height = VD55G0_HEIGHT,
+	.bayer = false,
+	.hdr = false,
+	.absolute_endpoints = true,
+	.ae_coldstart_exposure_in_us = false,
+	.limit_flash_duty_cycle = true,
+	.implicit_patch_boot = false,
+};
+
 static const struct vd55g1_chip_info vd55g1_chip_info = {
 	.id = 0x53354731,
 	.name = "vd55g1",
+	.modes = vd55g1_supported_modes,
+	.num_modes = ARRAY_SIZE(vd55g1_supported_modes),
 	.reg_map = vd55g1_reg_map,
 	.revisions = vd55g1_revisions,
 	.num_revisions = ARRAY_SIZE(vd55g1_revisions),
+	.mipi_rate_min = VD55G1_MIPI_RATE_MIN,
+	.mipi_rate_max = VD55G1_MIPI_RATE_MAX,
+	.width = VD55G1_WIDTH,
+	.height = VD55G1_HEIGHT,
 	.bayer = false,
+	.hdr = true,
+	.absolute_endpoints = false,
+	.ae_coldstart_exposure_in_us = true,
+	.limit_flash_duty_cycle = false,
+	.implicit_patch_boot = true,
 };
 
 static const struct vd55g1_chip_info vd65g4_chip_info = {
 	.id = 0x53354733,
 	.name = "vd65g4",
+	.modes = vd55g1_supported_modes,
+	.num_modes = ARRAY_SIZE(vd55g1_supported_modes),
 	.reg_map = vd55g1_reg_map,
 	.revisions = vd65g4_revisions,
 	.num_revisions = ARRAY_SIZE(vd65g4_revisions),
+	.width = VD55G1_WIDTH,
+	.height = VD55G1_HEIGHT,
 	.bayer = true,
+	.hdr = true,
+	.absolute_endpoints = false,
+	.ae_coldstart_exposure_in_us = true,
+	.limit_flash_duty_cycle = false,
+	.implicit_patch_boot = true,
 };
 
 struct vd55g1 {
@@ -783,8 +915,9 @@ static unsigned int vd55g1_get_hblank_min(struct vd55g1 *sensor,
 
 	/* Absolute time required for ADCs to convert pixels */
 	min_line_length = VD55G1_LINE_LENGTH_MIN;
-	if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB)
-		min_line_length = VD55G1_LINE_LENGTH_SUB_MIN;
+	if (sensor->info->hdr)
+		if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB)
+			min_line_length = VD55G1_LINE_LENGTH_SUB_MIN;
 
 	/* Respect both constraint */
 	min_line_length = max(min_line_length, mipi_req_line_length);
@@ -808,6 +941,11 @@ static void vd55g1_get_frame_timings(struct vd55g1 *sensor,
 	timings->frame_length = crop->height + sensor->vblank_ctrl->val;
 
 	timings->expo_max = timings->frame_length - VD55G1_EXPO_MAX_TERM;
+
+	if (sensor->info->limit_flash_duty_cycle &&
+	    sensor->led_ctrl->val == V4L2_FLASH_LED_MODE_FLASH) {
+		timings->expo_max = timings->expo_max / 2;
+	}
 }
 
 static inline int vd55g1_get_ctx_addr(struct vd55g1 *sensor,
@@ -959,12 +1097,12 @@ static int vd55g1_prepare_clock_tree(struct vd55g1 *sensor)
 	/* MIPI bus is double data rate */
 	sensor->mipi_rate = sensor->link_freq * 2;
 
-	if (sensor->mipi_rate < VD55G1_MIPI_RATE_MIN ||
-	    sensor->mipi_rate > VD55G1_MIPI_RATE_MAX) {
+	if (sensor->mipi_rate < sensor->info->mipi_rate_min ||
+	    sensor->mipi_rate > sensor->info->mipi_rate_max) {
 		dev_err(sensor->dev,
 			"Only %luMbps-%luMbps data rate range supported. Provided %lu Mbps\n",
-			VD55G1_MIPI_RATE_MIN / MEGA,
-			VD55G1_MIPI_RATE_MAX / MEGA,
+			sensor->info->mipi_rate_min / MEGA,
+			sensor->info->mipi_rate_max / MEGA,
 			sensor->mipi_rate / MEGA);
 		return -EINVAL;
 	}
@@ -1021,16 +1159,21 @@ static int vd55g1_update_expo_cluster(struct vd55g1 *sensor, bool is_auto)
 						      VD55G1_EXP_MANUAL;
 	int ret = 0;
 
-	if (sensor->ae_ctrl->is_new)
+	if (sensor->ae_ctrl->is_new) {
 		vd55g1_write_ctx(sensor, REG_CTX_EXP_MODE, 0, expo_state,
 			    &ret);
+		vd55g1_write(sensor, REG_EXPOSURE_MAX_COARSE,
+				sensor->expo_ctrl->maximum, &ret);
+	}
 
-	if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB &&
-	    sensor->hdr_ctrl->is_new) {
-		vd55g1_write_ctx(sensor, REG_CTX_EXP_MODE, 1,
-			    VD55G1_EXP_BYPASS, &ret);
-		if (ret)
-			return ret;
+	if (sensor->info->hdr) {
+		if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB &&
+		    sensor->hdr_ctrl->is_new) {
+			vd55g1_write_ctx(sensor, REG_CTX_EXP_MODE, 1,
+				    VD55G1_EXP_BYPASS, &ret);
+			if (ret)
+				return ret;
+		}
 	}
 
 	if (!is_auto && sensor->expo_ctrl->is_new)
@@ -1083,13 +1226,14 @@ static int vd55g1_read_expo_cluster(struct vd55g1 *sensor)
 }
 
 static int vd55g1_update_frame_length(struct vd55g1 *sensor,
-				      unsigned int frame_length)
+				     unsigned int frame_length)
 {
 	int ret = 0;
 
-	if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB)
-		vd55g1_write_ctx(sensor, REG_CTX_FRAME_LENGTH, 1,
-			    frame_length, &ret);
+	if (sensor->info->hdr)
+		if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB)
+			vd55g1_write_ctx(sensor, REG_CTX_FRAME_LENGTH, 1,
+				    frame_length, &ret);
 	vd55g1_write_ctx(sensor, REG_CTX_FRAME_LENGTH, 0, frame_length,
 		    &ret);
 
@@ -1114,24 +1258,32 @@ static int vd55g1_update_exposure_target(struct vd55g1 *sensor, int index)
 static int vd55g1_apply_cold_start(struct vd55g1 *sensor,
 				   struct v4l2_rect *crop)
 {
-	/*
-	 * Cold start register is a single register expressed as exposure time
-	 * in us. This differ from status registers being a combination of
-	 * exposure, digital gain, and analog gain, requiring the following
-	 * format conversion.
-	 */
-	unsigned int line_length = crop->width + sensor->hblank_ctrl->val;
-	unsigned int line_time_us = DIV_ROUND_UP(line_length * MEGA,
-						 sensor->pixel_clock);
-	u8 d_gain = DIV_ROUND_CLOSEST(sensor->dgain_ctrl->val, 1 << 8);
-	u8 a_gain = DIV_ROUND_CLOSEST(32, (32 - sensor->again_ctrl->val));
-	unsigned int expo_us = sensor->expo_ctrl->val * d_gain * a_gain *
-			       line_time_us;
-	int ret = 0;
+	int ret;
+
+	if (sensor->info->ae_coldstart_exposure_in_us) {
+		/*
+		 * Cold start register is a single register expressed as exposure time
+		 * in us. This differ from status registers being a combination of
+		 * exposure, digital gain, and analog gain, requiring the following
+		 * format conversion.
+		 */
+		unsigned int line_length =
+			crop->width + sensor->hblank_ctrl->val;
+		unsigned int line_time_us =
+			DIV_ROUND_UP(line_length * MEGA, sensor->pixel_clock);
+		u8 d_gain = DIV_ROUND_CLOSEST(sensor->dgain_ctrl->val, 1 << 8);
+		u8 a_gain =
+			DIV_ROUND_CLOSEST(32, (32 - sensor->again_ctrl->val));
+		unsigned int expo_us =
+			sensor->expo_ctrl->val * d_gain * a_gain * line_time_us;
+		vd55g1_write(sensor, REG_AE_COLDSTART_EXPOSURE_US, expo_us,
+				&ret);
+	} else {
+		vd55g1_write(sensor, REG_AE_COLDSTART_COARSE_EXPOSURE,
+				sensor->expo_ctrl->val, &ret);
+	}
 
 	vd55g1_write(sensor, REG_AE_FORCE_COLDSTART, 1, &ret);
-	vd55g1_write(sensor, REG_AE_COLDSTART_EXPOSURE_US, expo_us,
-			&ret);
 
 	return ret;
 }
@@ -1154,10 +1306,13 @@ static int vd55g1_update_hdr_mode(struct vd55g1 *sensor)
 {
 	int ret = 0;
 
+	if (!sensor->info->hdr)
+		return -EINVAL;
+
 	switch (sensor->hdr_ctrl->val) {
 	case VD55G1_NO_HDR:
 		vd55g1_write(sensor, REG_EXPOSURE_MAX_COARSE,
-				VD55G1_EXPOSURE_MAX_COARSE_DEF, &ret);
+				sensor->expo_ctrl->maximum, &ret);
 		vd55g1_write(sensor, REG_EXPOSURE_USE_CASES, 0, &ret);
 		vd55g1_write(sensor, REG_NEXT_CTX, 0x0, &ret);
 
@@ -1223,19 +1378,30 @@ static int vd55g1_set_framefmt(struct vd55g1 *sensor,
 
 	vd55g1_write_ctx(sensor, REG_CTX_X_START, 0, crop->left, &ret);
 	vd55g1_write_ctx(sensor, REG_CTX_Y_START, 0, crop->top, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 0,
-	                 crop->width, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 0,
-	                 crop->height, &ret);
 
-	vd55g1_write_ctx(sensor, REG_CTX_X_START, 1,
-	                 crop->left, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_Y_START, 1,
-	                 crop->top, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 1,
-	                 crop->width, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 1,
-	                 crop->height, &ret);
+	if (sensor->info->absolute_endpoints) {
+		vd55g1_write_ctx(sensor, REG_CTX_X_END, 0,
+		                 crop->left + crop->width - 1, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_END, 0,
+		                 crop->top + crop->height - 1, &ret);
+	} else {
+		vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 0,
+		                 crop->width, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 0,
+		                 crop->height, &ret);
+	}
+
+	if (sensor->info->hdr &&
+		!sensor->info->absolute_endpoints) {
+		vd55g1_write_ctx(sensor, REG_CTX_X_START, 1,
+		                 crop->left, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_START, 1,
+		                 crop->top, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 1,
+		                 crop->width, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 1,
+		                 crop->height, &ret);
+	}
 
 	return ret;
 }
@@ -1252,12 +1418,14 @@ static int vd55g1_update_gpios(struct vd55g1 *sensor, unsigned long gpio_mask)
 		if (gpio_val == VD55G1_GPIO_MODE_STROBE &&
 		    sensor->led_ctrl->val == V4L2_FLASH_LED_MODE_NONE) {
 			gpio_val = VD55G1_GPIO_MODE_IN;
-			if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB) {
-				/* Make its context 1 counterpart strobe too */
-				vd55g1_write_ctx_offset(sensor,
-					    REG_CTX_GPIO_0_CTRL,
-							1, io,
-					    gpio_val, &ret);
+			if (sensor->info->hdr) {
+				if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB) {
+					/* Make its context 1 counterpart strobe too */
+					vd55g1_write_ctx_offset(sensor,
+						    REG_CTX_GPIO_0_CTRL,
+								1, io,
+						    gpio_val, &ret);
+				}
 			}
 		}
 
@@ -1442,7 +1610,9 @@ static int vd55g1_boot(struct vd55g1 *sensor)
 		ret = vd55g1_apply_patch(sensor, fw);
 		if (ret)
 			return ret;
-	} else {
+	}
+
+	if (!sensor->info->implicit_patch_boot || !sensor->rev_info->needs_patch) {
 		vd55g1_write(sensor, REG_BOOT, VD55G1_BOOT_BOOT, &ret);
 		vd55g1_poll_reg(sensor, REG_BOOT, 0, &ret);
 		if (ret) {
@@ -1462,6 +1632,7 @@ static int vd55g1_get_selection(struct v4l2_subdev *sd,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_selection *sel)
 {
+	struct vd55g1 *sensor = to_vd55g1(sd);
 	const struct v4l2_rect *crop = v4l2_subdev_state_get_crop(sd_state, 0);
 
 	switch (sel->target) {
@@ -1473,8 +1644,8 @@ static int vd55g1_get_selection(struct v4l2_subdev *sd,
 	case V4L2_SEL_TGT_CROP_BOUNDS:
 		sel->r.top = 0;
 		sel->r.left = 0;
-		sel->r.width = VD55G1_WIDTH;
-		sel->r.height = VD55G1_HEIGHT;
+		sel->r.width = sensor->info->width;
+		sel->r.height = sensor->info->height;
 		return 0;
 	}
 
@@ -1549,25 +1720,25 @@ static int vd55g1_set_pad_fmt(struct v4l2_subdev *sd,
 	struct v4l2_rect pad_crop;
 	unsigned int binning;
 
-	new_mode = v4l2_find_nearest_size(vd55g1_supported_modes,
-					  ARRAY_SIZE(vd55g1_supported_modes),
-					  width, height, sd_fmt->format.width,
+	new_mode = v4l2_find_nearest_size(sensor->info->modes,
+					  sensor->info->num_modes, width,
+					  height, sd_fmt->format.width,
 					  sd_fmt->format.height);
 
 	vd55g1_update_pad_fmt(sensor, new_mode, sd_fmt->format.code,
-			      &sd_fmt->format);
+			     &sd_fmt->format);
 
 	/*
 	 * Use binning to maximize the crop rectangle size, and centre it in the
 	 * sensor.
 	 */
-	binning = min(VD55G1_WIDTH / sd_fmt->format.width,
-		      VD55G1_HEIGHT / sd_fmt->format.height);
+	binning = min(sensor->info->width / sd_fmt->format.width,
+		      sensor->info->height / sd_fmt->format.height);
 	binning = min(binning, 2U);
 	pad_crop.width = sd_fmt->format.width * binning;
 	pad_crop.height = sd_fmt->format.height * binning;
-	pad_crop.left = (VD55G1_WIDTH - pad_crop.width) / 2;
-	pad_crop.top = (VD55G1_HEIGHT - pad_crop.height) / 2;
+	pad_crop.left = (sensor->info->width - pad_crop.width) / 2;
+	pad_crop.top = (sensor->info->height - pad_crop.height) / 2;
 
 	format = v4l2_subdev_state_get_format(sd_state, sd_fmt->pad);
 
@@ -1601,9 +1772,9 @@ static int vd55g1_init_state(struct v4l2_subdev *sd,
 	if (ret)
 		return ret;
 
-	vd55g1_update_pad_fmt(sensor, &vd55g1_supported_modes[VD55G1_MODE_DEF],
-			      vd55g1_get_fmt_code(sensor, VD55G1_MBUS_CODE_DEF),
-			      &fmt.format);
+	vd55g1_update_pad_fmt(sensor, &sensor->info->modes[VD55G1_MODE_DEF],
+			     vd55g1_get_fmt_code(sensor, VD55G1_MBUS_CODE_DEF),
+			     &fmt.format);
 
 	return vd55g1_set_pad_fmt(sd, sd_state, &fmt);
 }
@@ -1615,16 +1786,16 @@ static int vd55g1_enum_frame_size(struct v4l2_subdev *sd,
 	struct vd55g1 *sensor = to_vd55g1(sd);
 	u32 code;
 
-	if (fse->index >= ARRAY_SIZE(vd55g1_supported_modes))
+	if (fse->index >= sensor->info->num_modes)
 		return -EINVAL;
 
 	code = vd55g1_get_fmt_code(sensor, fse->code);
 	if (fse->code != code)
 		return -EINVAL;
 
-	fse->min_width = vd55g1_supported_modes[fse->index].width;
+	fse->min_width = sensor->info->modes[fse->index].width;
 	fse->max_width = fse->min_width;
-	fse->min_height = vd55g1_supported_modes[fse->index].height;
+	fse->min_height = sensor->info->modes[fse->index].height;
 	fse->max_height = fse->min_height;
 
 	return 0;
@@ -1681,8 +1852,7 @@ static int vd55g1_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct vd55g1 *sensor = ctrl_to_vd55g1(ctrl);
 	struct v4l2_subdev_state *state =
 		v4l2_subdev_get_locked_active_state(&sensor->sd);
-	struct v4l2_rect *crop =
-		v4l2_subdev_state_get_crop(state, 0);
+	struct v4l2_rect *crop = v4l2_subdev_state_get_crop(state, 0);
 	struct v4l2_mbus_framefmt *format =
 		v4l2_subdev_state_get_format(state, 0);
 	unsigned int hblank = vd55g1_get_hblank_min(sensor, format, crop);
@@ -1696,6 +1866,7 @@ static int vd55g1_s_ctrl(struct v4l2_ctrl *ctrl)
 	/* Update controls state, range, etc. whatever the state of the HW */
 	switch (ctrl->id) {
 	case V4L2_CID_VBLANK:
+	case V4L2_CID_FLASH_LED_MODE:
 		vd55g1_get_frame_timings(sensor, crop, &timings);
 		ret = __v4l2_ctrl_modify_range(sensor->expo_ctrl, 0,
 					       timings.expo_max, 1,
@@ -1841,11 +2012,14 @@ static int vd55g1_init_ctrls(struct vd55g1 *sensor)
 				       ARRAY_SIZE(vd55g1_ev_bias_menu) - 1,
 				       ARRAY_SIZE(vd55g1_ev_bias_menu) / 2,
 				       vd55g1_ev_bias_menu);
-	sensor->hdr_ctrl =
-		v4l2_ctrl_new_std_menu_items(hdl, ops,
-					     V4L2_CID_HDR_SENSOR_MODE,
-					     ARRAY_SIZE(vd55g1_hdr_menu) - 1, 0,
-					     VD55G1_NO_HDR, vd55g1_hdr_menu);
+	if (sensor->info->hdr) {
+		sensor->hdr_ctrl =
+			v4l2_ctrl_new_std_menu_items(hdl, ops,
+						     V4L2_CID_HDR_SENSOR_MODE,
+						     ARRAY_SIZE(vd55g1_hdr_menu) - 1,
+						     0, VD55G1_NO_HDR,
+						     vd55g1_hdr_menu);
+	}
 	hblank = vd55g1_get_hblank_min(sensor, format, crop);
 	sensor->hblank_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK,
 						hblank, hblank, 1, hblank);
@@ -2005,8 +2179,9 @@ static int vd55g1_check_csi_conf(struct vd55g1 *sensor,
 	int ret;
 
 	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &ep);
+	fwnode_handle_put(endpoint);
 	if (ret)
-		return -EINVAL;
+		return ret;
 
 	/* Check lanes number */
 	n_lanes = ep.bus.mipi_csi2.num_data_lanes;
@@ -2100,6 +2275,11 @@ static int vd55g1_parse_dt_gpios(struct vd55g1 *sensor)
 		set_bit(led_gpios[i], &sensor->ext_leds_mask);
 	}
 
+	if (nb_gpios_leds == 0) {
+		sensor->gpios[1] = VD55G1_GPIO_MODE_STROBE;
+		set_bit(1, &sensor->ext_leds_mask);
+	}
+
 	return 0;
 }
 
@@ -2110,13 +2290,11 @@ static int vd55g1_parse_dt(struct vd55g1 *sensor)
 
 	endpoint = fwnode_graph_get_endpoint_by_id(dev_fwnode(sensor->dev),
 						   0, 0, 0);
-	if (!endpoint) {
-		dev_err(sensor->dev, "Endpoint node not found\n");
-		return -EINVAL;
-	}
+	if (!endpoint)
+		return dev_err_probe(sensor->dev, -EPROBE_DEFER,
+				     "waiting for fwnode graph endpoint\n");
 
 	ret = vd55g1_check_csi_conf(sensor, endpoint);
-	fwnode_handle_put(endpoint);
 	if (ret)
 		return ret;
 
@@ -2205,7 +2383,7 @@ static int vd55g1_probe(struct i2c_client *client)
 
 	ret = vd55g1_parse_dt(sensor);
 	if (ret)
-		return dev_err_probe(dev, ret, "Failed to parse Device Tree\n");
+		return ret;
 
 	/* Get (and check) resources : power regs, ext clock, reset gpio */
 	ret = vd55g1_get_regulators(sensor);
@@ -2285,7 +2463,14 @@ static void vd55g1_remove(struct i2c_client *client)
 	pm_runtime_dont_use_autosuspend(&client->dev);
 }
 
+static const struct acpi_device_id vd55g1_acpi_match[] = {
+	{ .id = "SMO55F0", .driver_data = (kernel_ulong_t)&vd55g0_chip_info },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(acpi, vd55g1_acpi_match);
+
 static const struct of_device_id vd55g1_dt_ids[] = {
+	{ .compatible = "st,vd55g0", .data = &vd55g0_chip_info },
 	{ .compatible = "st,vd55g1", .data = &vd55g1_chip_info },
 	{ .compatible = "st,vd65g4", .data = &vd65g4_chip_info },
 	{ /* sentinel */ }
@@ -2299,6 +2484,7 @@ static const struct dev_pm_ops vd55g1_pm_ops = {
 static struct i2c_driver vd55g1_i2c_driver = {
 	.driver = {
 		.name  = "vd55g1",
+		.acpi_match_table = vd55g1_acpi_match,
 		.of_match_table = vd55g1_dt_ids,
 		.pm = &vd55g1_pm_ops,
 	},
@@ -2310,5 +2496,9 @@ module_i2c_driver(vd55g1_i2c_driver);
 
 MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@foss.st.com>");
 MODULE_AUTHOR("Sylvain Petinot <sylvain.petinot@foss.st.com>");
+MODULE_AUTHOR("Peter Marshall <pm@petermarshall.ca>");
 MODULE_DESCRIPTION("VD55G1 camera subdev driver");
+MODULE_FIRMWARE("vd55g0-cut1.bin");
+MODULE_FIRMWARE("vd55g0-cut2.bin");
+MODULE_FIRMWARE("vd55g1.bin");
 MODULE_LICENSE("GPL");
