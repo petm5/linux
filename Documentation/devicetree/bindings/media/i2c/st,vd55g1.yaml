@@ -5,16 +5,16 @@
 $id: http://devicetree.org/schemas/media/i2c/st,vd55g1.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: STMicroelectronics VD55G1 Global Shutter Image Sensor
+title: STMicroelectronics VD55G Family Global Shutter Image Sensors
 
 maintainers:
   - Benjamin Mugnier <benjamin.mugnier@foss.st.com>
   - Sylvain Petinot <sylvain.petinot@foss.st.com>
 
 description: |-
- The STMicroelectronics VD55G1 is a global shutter image sensor with an active
- array size of 804H x 704V. It is programmable through I2C interface. The I2C
- address is fixed to 0x10.
+ The STMicroelectronics VD55G family (VD55G0 and VD65G4) consists of global
+ shutter image sensors with an active array size of 804H x 704V. They are
+ programmable through I2C interface. The I2C address is fixed to 0x10.
 
  Image data is sent through MIPI CSI-2, which is configured as only 1 data
  lane. The sensor provides 4 GPIOS that can be used for external LED signal
