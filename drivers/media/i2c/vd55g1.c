@@ -29,26 +29,165 @@
 #include <media/v4l2-subdev.h>
 
 /* Register Map */
-#define VD55G_REG_MODEL_ID CCI_REG32_LE(0x0000)
-#define VD55G_REG_REVISION CCI_REG16_LE(0x0004)
-#define VD55G_REG_FWPATCH_START_ADDR CCI_REG8(0x2000)
+enum vd55g_reg_id {
+	REG_MODEL_ID,
+	REG_REVISION,
+	REG_FWPATCH_START_ADDR,
+	REG_BOOT,
+	REG_STBY,
+	REG_STREAMING,
+	REG_EXT_CLOCK,
+	REG_LINE_LENGTH,
+	REG_ORIENTATION,
+	REG_FORMAT_CTRL,
+	REG_OIF_CTRL,
+	REG_OIF_IMG_CTRL,
+	REG_MIPI_DATA_RATE,
+
+	/* Model-specific */
+	REG_SYSTEM_FSM,
+	REG_ISL_ENABLE,
+	REG_FWPATCH_REVISION,
+	REG_PATGEN_CTRL,
+	REG_READOUT_CTRL,
+	REG_DUSTER_CTRL,
+	REG_AE_TARGET_PERCENTAGE,
+	REG_MANUAL_ANALOG_GAIN,
+	REG_MANUAL_COARSE_EXPOSURE,
+	REG_MANUAL_DIGITAL_GAIN,
+	REG_APPLIED_COARSE_EXPOSURE,
+	REG_APPLIED_ANALOG_GAIN,
+	REG_APPLIED_DIGITAL_GAIN,
+	REG_AE_FORCE_COLDSTART,
+	REG_AE_COLDSTART_EXPOSURE_US,
+	REG_AE_COLDSTART_COARSE_EXPOSURE,
+	/* HDR-specific */
+	REG_NEXT_CTX,
+	REG_EXPOSURE_USE_CASES,
+	REG_EXPOSURE_MAX_COARSE,
+	REG_CTX_REPEAT_COUNT_CTX0,
+	REG_CTX_REPEAT_COUNT_CTX1,
+
+	/* Context-specific register bases */
+	REG_CTX_STRIDE, /* Not a real register, stores the context bank offset */
+	REG_CTX_REPEAT_COUNT,
+	REG_CTX_EXP_MODE,
+	REG_CTX_FRAME_LENGTH,
+	REG_CTX_X_START,
+	REG_CTX_X_WIDTH_OR_END,
+	REG_CTX_Y_START,
+	REG_CTX_Y_HEIGHT_OR_END,
+	REG_CTX_GPIO_0_CTRL,
+	/* HDR-specific */
+	REG_CTX_VT_MODE,
+	REG_CTX_MASK_FRAME_CTRL,
+	REG_CTX_EXPOSURE_INSTANCE,
+
+	REG_MAX_INDEX /* Keeps track of enum size */
+};
+
+static const int vd55g0_reg_map[REG_MAX_INDEX] = {
+	[REG_MODEL_ID] = CCI_REG32_LE(0x0000),
+	[REG_REVISION] = CCI_REG16_LE(0x0004),
+	[REG_FWPATCH_START_ADDR] = CCI_REG8(0x2000),
+	[REG_BOOT] = CCI_REG8(0x0200),
+	[REG_STBY] = CCI_REG8(0x0201),
+	[REG_STREAMING] = CCI_REG8(0x0202),
+	[REG_EXT_CLOCK] = CCI_REG32_LE(0x0220),
+	[REG_LINE_LENGTH] = CCI_REG16_LE(0x0300),
+	[REG_ORIENTATION] = CCI_REG8(0x0302),
+	[REG_FORMAT_CTRL] = CCI_REG8(0x030a),
+	[REG_OIF_CTRL] = CCI_REG16_LE(0x030c),
+	[REG_OIF_IMG_CTRL] = CCI_REG8(0x030f),
+	[REG_MIPI_DATA_RATE] = CCI_REG32_LE(0x0224),
+	[REG_SYSTEM_FSM] = CCI_REG8(0x002c),
+	[REG_ISL_ENABLE] = CCI_REG8(0x0329),
+	[REG_FWPATCH_REVISION] = CCI_REG16_LE(0x0022),
+	[REG_PATGEN_CTRL] = CCI_REG16_LE(0x0400),
+	[REG_READOUT_CTRL] = CCI_REG8(0x047a),
+	[REG_DUSTER_CTRL] = CCI_REG8(0x0316),
+	[REG_AE_TARGET_PERCENTAGE] = CCI_REG8(0x0440),
+	[REG_MANUAL_ANALOG_GAIN] = CCI_REG8(0x044d),
+	[REG_MANUAL_COARSE_EXPOSURE] = CCI_REG16_LE(0x044e),
+	[REG_MANUAL_DIGITAL_GAIN] = CCI_REG16_LE(0x0450),
+	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x0064),
+	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x0066),
+	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x0068),
+	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x042c),
+	[REG_AE_COLDSTART_COARSE_EXPOSURE] = CCI_REG32_LE(0x042e),
+	[REG_NEXT_CTX] = CCI_REG16_LE(0x0478),
+	[REG_EXPOSURE_MAX_COARSE] = CCI_REG16_LE(0x096c),
+	[REG_CTX_REPEAT_COUNT_CTX0] = CCI_REG16_LE(0x0476),
+	[REG_CTX_REPEAT_COUNT_CTX1] = CCI_REG16_LE(0x04a6),
+
+	/* Context properties */
+	[REG_CTX_STRIDE] = 0x30,
+	[REG_CTX_EXP_MODE] = CCI_REG8(0x044c),
+	[REG_CTX_FRAME_LENGTH] = CCI_REG32_LE(0x0458),
+	[REG_CTX_X_START] = CCI_REG16_LE(0x045e),
+	[REG_CTX_X_WIDTH_OR_END] = CCI_REG16_LE(0x0460),
+	[REG_CTX_Y_START] = CCI_REG16_LE(0x0462),
+	[REG_CTX_Y_HEIGHT_OR_END] = CCI_REG16_LE(0x0464),
+	[REG_CTX_GPIO_0_CTRL] = CCI_REG8(0x0467),
+};
+
+static const int vd55g1_reg_map[REG_MAX_INDEX] = {
+	[REG_MODEL_ID] = CCI_REG32_LE(0x0000),
+	[REG_REVISION] = CCI_REG16_LE(0x0004),
+	[REG_FWPATCH_START_ADDR] = CCI_REG8(0x2000),
+	[REG_BOOT] = CCI_REG8(0x0200),
+	[REG_STBY] = CCI_REG8(0x0201),
+	[REG_STREAMING] = CCI_REG8(0x0202),
+	[REG_EXT_CLOCK] = CCI_REG32_LE(0x0220),
+	[REG_LINE_LENGTH] = CCI_REG16_LE(0x0300),
+	[REG_ORIENTATION] = CCI_REG8(0x0302),
+	[REG_FORMAT_CTRL] = CCI_REG8(0x030a),
+	[REG_OIF_CTRL] = CCI_REG16_LE(0x030c),
+	[REG_OIF_IMG_CTRL] = CCI_REG8(0x030f),
+	[REG_MIPI_DATA_RATE] = CCI_REG32_LE(0x0224),
+	[REG_SYSTEM_FSM] = CCI_REG8(0x001c),
+	[REG_ISL_ENABLE] = CCI_REG8(0x0326),
+	[REG_FWPATCH_REVISION] = CCI_REG16_LE(0x0012),
+	[REG_PATGEN_CTRL] = CCI_REG16_LE(0x0304),
+	[REG_READOUT_CTRL] = CCI_REG8(0x057e),
+	[REG_DUSTER_CTRL] = CCI_REG8(0x03ae),
+	[REG_AE_TARGET_PERCENTAGE] = CCI_REG8(0x0486),
+	[REG_MANUAL_ANALOG_GAIN] = CCI_REG8(0x0501),
+	[REG_MANUAL_COARSE_EXPOSURE] = CCI_REG16_LE(0x0502),
+	[REG_MANUAL_DIGITAL_GAIN] = CCI_REG16_LE(0x0504),
+	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x00e8),
+	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x00ea),
+	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x00ec),
+	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x0308),
+	[REG_AE_COLDSTART_EXPOSURE_US] = CCI_REG32_LE(0x0374),
+	[REG_NEXT_CTX] = CCI_REG16_LE(0x03e4),
+	[REG_EXPOSURE_USE_CASES] = CCI_REG8(0x0312),
+	[REG_EXPOSURE_MAX_COARSE] = CCI_REG16_LE(0x0372),
+	[REG_CTX_REPEAT_COUNT_CTX0] = CCI_REG16_LE(0x03dc),
+	[REG_CTX_REPEAT_COUNT_CTX1] = CCI_REG16_LE(0x03de),
+
+	/* Context properties */
+	[REG_CTX_STRIDE] = 0x50,
+	[REG_CTX_EXP_MODE] = CCI_REG8(0x0500),
+	[REG_CTX_FRAME_LENGTH] = CCI_REG32_LE(0x050c),
+	[REG_CTX_X_START] = CCI_REG16_LE(0x0514),
+	[REG_CTX_X_WIDTH_OR_END] = CCI_REG16_LE(0x0516),
+	[REG_CTX_Y_START] = CCI_REG16_LE(0x0510),
+	[REG_CTX_Y_HEIGHT_OR_END] = CCI_REG16_LE(0x0512),
+	[REG_CTX_GPIO_0_CTRL] = CCI_REG8(0x051d),
+	[REG_CTX_VT_MODE] = CCI_REG8(0x0536),
+	[REG_CTX_MASK_FRAME_CTRL] = CCI_REG8(0x0537),
+	[REG_CTX_EXPOSURE_INSTANCE] = CCI_REG32_LE(0x052d),
+};
+
+/* Register values */
 #define VD55G_SYSTEM_FSM_READY_TO_BOOT 0x01
 #define VD55G_SYSTEM_FSM_SW_STBY 0x02
 #define VD55G_SYSTEM_FSM_STREAMING 0x03
-#define VD55G_REG_BOOT CCI_REG8(0x0200)
 #define VD55G_BOOT_BOOT 1
 #define VD55G_BOOT_PATCH 2
-#define VD55G_REG_STBY CCI_REG8(0x0201)
 #define VD55G_STBY_START_STREAM 1
-#define VD55G_REG_STREAMING CCI_REG8(0x0202)
 #define VD55G_STREAMING_STOP_STREAM 1
-#define VD55G_REG_EXT_CLOCK CCI_REG32_LE(0x0220)
-#define VD55G_REG_LINE_LENGTH CCI_REG16_LE(0x0300)
-#define VD55G_REG_ORIENTATION CCI_REG8(0x0302)
-#define VD55G_REG_FORMAT_CTRL CCI_REG8(0x030a)
-#define VD55G_REG_OIF_CTRL CCI_REG16_LE(0x030c)
-#define VD55G_REG_OIF_IMG_CTRL CCI_REG8(0x030f)
-#define VD55G_REG_MIPI_DATA_RATE CCI_REG32_LE(0x0224)
 #define VD55G_PATGEN_TYPE_SHIFT 4
 #define VD55G_PATGEN_ENABLE BIT(0)
 #define VD55G_READOUT_CTRL_BIN_MODE_NORMAL 0
@@ -59,33 +198,12 @@
 #define VD55G_DUSTER_RING_ENABLE BIT(4)
 #define VD55G1_EXPOSURE_USE_CASES_MULTI_CONTEXT BIT(2)
 #define VD55G1_EXPOSURE_MAX_COARSE_SUB 446
-
-#define VD55G_REG_EXP_MODE(sensor, ctx) \
-	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_EXP_MODE, ctx))
-#define VD55G_REG_FRAME_LENGTH(sensor, ctx) \
-	CCI_REG32_LE(vd55g_get_ctx_addr(sensor, REG_CTX_FRAME_LENGTH, ctx))
-#define VD55G_REG_X_START(sensor, ctx) \
-	CCI_REG16_LE(vd55g_get_ctx_addr(sensor, REG_CTX_X_START, ctx))
-#define VD55G_REG_X_WIDTH_OR_END(sensor, ctx) \
-	CCI_REG16_LE(vd55g_get_ctx_addr(sensor, REG_CTX_X_WIDTH_OR_END, ctx))
-#define VD55G_REG_Y_START(sensor, ctx) \
-	CCI_REG16_LE(vd55g_get_ctx_addr(sensor, REG_CTX_Y_START, ctx))
-#define VD55G_REG_Y_HEIGHT_OR_END(sensor, ctx) \
-	CCI_REG16_LE(vd55g_get_ctx_addr(sensor, REG_CTX_Y_HEIGHT_OR_END, ctx))
-#define VD55G_REG_GPIO_CTRL(sensor, ctx, led) \
-	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_GPIO_0_CTRL, ctx) + (led))
 #define VD55G_GPIO_MODE_IN 0x01
 #define VD55G_GPIO_MODE_STROBE 0x02
-#define VD55G_REG_VT_MODE(sensor, ctx) \
-	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_VT_MODE, ctx))
 #define VD55G1_VT_MODE_NORMAL 0
 #define VD55G1_VT_MODE_SUBTRACTION 1
-#define VD55G_REG_MASK_FRAME_CTRL(sensor, ctx) \
-	CCI_REG8(vd55g_get_ctx_addr(sensor, REG_CTX_MASK_FRAME_CTRL, ctx))
 #define VD55G1_MASK_FRAME_CTRL_OUTPUT 0
 #define VD55G1_MASK_FRAME_CTRL_MASK 1
-#define VD55G_REG_EXPOSURE_INSTANCE(sensor, ctx) \
-	CCI_REG32_LE(vd55g_get_ctx_addr(sensor, REG_CTX_EXPOSURE_INSTANCE, ctx))
 
 #define VD55G0_WIDTH 644
 #define VD55G0_HEIGHT 604
@@ -526,116 +644,6 @@ struct vd55g_frame_timings {
 	u16 expo_max;
 };
 
-enum vd55g_reg_id {
-	REG_SYSTEM_FSM,
-	REG_ISL_ENABLE,
-	REG_FWPATCH_REVISION,
-	REG_PATGEN_CTRL,
-	REG_READOUT_CTRL,
-	REG_DUSTER_CTRL,
-	REG_AE_TARGET_PERCENTAGE,
-	REG_MANUAL_ANALOG_GAIN,
-	REG_MANUAL_COARSE_EXPOSURE,
-	REG_MANUAL_DIGITAL_GAIN,
-	REG_APPLIED_COARSE_EXPOSURE,
-	REG_APPLIED_ANALOG_GAIN,
-	REG_APPLIED_DIGITAL_GAIN,
-	REG_AE_FORCE_COLDSTART,
-	REG_AE_COLDSTART_EXPOSURE_US,
-	REG_AE_COLDSTART_COARSE_EXPOSURE,
-	/* HDR-specific */
-	REG_NEXT_CTX,
-	REG_EXPOSURE_USE_CASES,
-	REG_EXPOSURE_MAX_COARSE,
-	REG_CTX_REPEAT_COUNT_CTX0,
-	REG_CTX_REPEAT_COUNT_CTX1,
-
-	/* Context-specific register bases */
-	REG_CTX_STRIDE, /* Not a real register, stores the context bank offset */
-	REG_CTX_REPEAT_COUNT,
-	REG_CTX_EXP_MODE,
-	REG_CTX_FRAME_LENGTH,
-	REG_CTX_X_START,
-	REG_CTX_X_WIDTH_OR_END,
-	REG_CTX_Y_START,
-	REG_CTX_Y_HEIGHT_OR_END,
-	REG_CTX_GPIO_0_CTRL,
-	/* HDR-specific */
-	REG_CTX_VT_MODE,
-	REG_CTX_MASK_FRAME_CTRL,
-	REG_CTX_EXPOSURE_INSTANCE,
-
-	REG_MAX_INDEX /* Keeps track of enum size */
-};
-
-static const int vd55g0_reg_map[REG_MAX_INDEX] = {
-	[REG_SYSTEM_FSM] = CCI_REG8(0x002c),
-	[REG_ISL_ENABLE] = CCI_REG8(0x0329),
-	[REG_FWPATCH_REVISION] = CCI_REG16_LE(0x0022),
-	[REG_PATGEN_CTRL] = CCI_REG16_LE(0x0400),
-	[REG_READOUT_CTRL] = CCI_REG8(0x047a),
-	[REG_DUSTER_CTRL] = CCI_REG8(0x0316),
-	[REG_AE_TARGET_PERCENTAGE] = CCI_REG8(0x0440),
-	[REG_MANUAL_ANALOG_GAIN] = CCI_REG8(0x044d),
-	[REG_MANUAL_COARSE_EXPOSURE] = CCI_REG16_LE(0x044e),
-	[REG_MANUAL_DIGITAL_GAIN] = CCI_REG16_LE(0x0450),
-	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x0064),
-	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x0066),
-	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x0068),
-	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x042c),
-	[REG_AE_COLDSTART_COARSE_EXPOSURE] = CCI_REG32_LE(0x042e),
-	[REG_NEXT_CTX] = CCI_REG16_LE(0x0478),
-	[REG_EXPOSURE_MAX_COARSE] = CCI_REG16_LE(0x096c),
-	[REG_CTX_REPEAT_COUNT_CTX0] = CCI_REG16_LE(0x0476),
-	[REG_CTX_REPEAT_COUNT_CTX1] = CCI_REG16_LE(0x04a6),
-
-	/* Context properties */
-	[REG_CTX_STRIDE] = 0x30,
-	[REG_CTX_EXP_MODE] = 0x044c,
-	[REG_CTX_FRAME_LENGTH] = 0x0458,
-	[REG_CTX_X_START] = 0x045e,
-	[REG_CTX_X_WIDTH_OR_END] = 0x0460,
-	[REG_CTX_Y_START] = 0x0462,
-	[REG_CTX_Y_HEIGHT_OR_END] = 0x0464,
-	[REG_CTX_GPIO_0_CTRL] = 0x0467,
-};
-
-static const int vd55g1_reg_map[REG_MAX_INDEX] = {
-	[REG_SYSTEM_FSM] = CCI_REG8(0x001c),
-	[REG_ISL_ENABLE] = CCI_REG8(0x0326),
-	[REG_FWPATCH_REVISION] = CCI_REG16_LE(0x0012),
-	[REG_PATGEN_CTRL] = CCI_REG16_LE(0x0304),
-	[REG_READOUT_CTRL] = CCI_REG8(0x057e),
-	[REG_DUSTER_CTRL] = CCI_REG8(0x03ae),
-	[REG_AE_TARGET_PERCENTAGE] = CCI_REG8(0x0486),
-	[REG_MANUAL_ANALOG_GAIN] = CCI_REG8(0x0501),
-	[REG_MANUAL_COARSE_EXPOSURE] = CCI_REG16_LE(0x0502),
-	[REG_MANUAL_DIGITAL_GAIN] = CCI_REG16_LE(0x0504),
-	[REG_APPLIED_COARSE_EXPOSURE] = CCI_REG16_LE(0x00e8),
-	[REG_APPLIED_ANALOG_GAIN] = CCI_REG16_LE(0x00ea),
-	[REG_APPLIED_DIGITAL_GAIN] = CCI_REG16_LE(0x00ec),
-	[REG_AE_FORCE_COLDSTART] = CCI_REG8(0x0308),
-	[REG_AE_COLDSTART_EXPOSURE_US] = CCI_REG32_LE(0x0374),
-	[REG_NEXT_CTX] = CCI_REG16_LE(0x03e4),
-	[REG_EXPOSURE_USE_CASES] = CCI_REG8(0x0312),
-	[REG_EXPOSURE_MAX_COARSE] = CCI_REG16_LE(0x0372),
-	[REG_CTX_REPEAT_COUNT_CTX0] = CCI_REG16_LE(0x03dc),
-	[REG_CTX_REPEAT_COUNT_CTX1] = CCI_REG16_LE(0x03de),
-
-	/* Context properties */
-	[REG_CTX_STRIDE] = 0x50,
-	[REG_CTX_EXP_MODE] = 0x0500,
-	[REG_CTX_FRAME_LENGTH] = 0x050c,
-	[REG_CTX_X_START] = 0x0514,
-	[REG_CTX_X_WIDTH_OR_END] = 0x0516,
-	[REG_CTX_Y_START] = 0x0510,
-	[REG_CTX_Y_HEIGHT_OR_END] = 0x0512,
-	[REG_CTX_GPIO_0_CTRL] = 0x051d,
-	[REG_CTX_VT_MODE] = 0x0536,
-	[REG_CTX_MASK_FRAME_CTRL] = 0x0537,
-	[REG_CTX_EXPOSURE_INSTANCE] = 0x052d,
-};
-
 struct vd55g_patch_header {
 	__le16 patch_size;
 	u8 minor;
@@ -807,15 +815,6 @@ static inline struct vd55g *ctrl_to_vd55g(struct v4l2_ctrl *ctrl)
 	return to_vd55g(sd);
 }
 
-static inline int vd55g_get_ctx_addr(struct vd55g *sensor,
-				     enum vd55g_reg_id reg, u8 ctx)
-{
-	u16 base_addr = sensor->info->reg_map[reg];
-	u16 stride = sensor->info->reg_map[REG_CTX_STRIDE];
-
-	return base_addr + (stride * ctx);
-}
-
 static unsigned int vd55g_get_fmt_bpp(u32 code)
 {
 	switch (code) {
@@ -940,63 +939,87 @@ static void vd55g_get_frame_timings(struct vd55g *sensor,
 	}
 }
 
-#define vd55g_read(sensor, reg, val, err) \
-	cci_read((sensor)->regmap, reg, val, err)
+static inline int vd55g_get_ctx_addr(struct vd55g *sensor,
+				     enum vd55g_reg_id reg, u8 ctx, u8 offset, u32 *addr, int *err)
+{
+	u32 base_addr;
+	u32 stride;
 
-#define vd55g_write(sensor, reg, val, err) \
-	cci_write((sensor)->regmap, reg, val, err)
+	base_addr = sensor->info->reg_map[reg];
 
-static int vd55g_cci_read(struct vd55g *sensor, enum vd55g_reg_id reg, u64 *val,
+	if (!base_addr) {
+		dev_err(sensor->dev,
+			"Register %d not supported on this variant\n", reg);
+		if (err)
+			*err = -EOPNOTSUPP;
+		return -EOPNOTSUPP;
+	}
+
+	stride = sensor->info->reg_map[REG_CTX_STRIDE];
+
+	*addr = base_addr + ctx * stride + offset;
+
+	return 0;
+}
+
+#define vd55g_cci_read(sensor, reg, val, err) \
+ vd55g_cci_read_ctx(sensor, reg, 0, val, err)
+
+#define vd55g_cci_write(sensor, reg, val, err) \
+ vd55g_cci_write_ctx(sensor, reg, 0, val, err)
+
+#define vd55g_cci_read_ctx(sensor, reg, ctx, val, err) \
+ vd55g_cci_read_ctx_offset(sensor, reg, ctx, 0, val, err)
+
+#define vd55g_cci_write_ctx(sensor, reg, ctx, val, err) \
+ vd55g_cci_write_ctx_offset(sensor, reg, ctx, 0, val, err)
+
+static int vd55g_cci_read_ctx_offset(struct vd55g *sensor, enum vd55g_reg_id reg, u8 ctx, u8 offset, u64 *val,
 			  int *err)
 {
-	u32 physical_addr;
+	u32 addr;
+	int ret;
 
 	if (err && *err)
 		return *err;
 
-	physical_addr = sensor->info->reg_map[reg];
+	ret = vd55g_get_ctx_addr(sensor, reg, ctx, offset, &addr, err);
+	if (ret)
+		return ret;
 
-	if (!physical_addr) {
-		dev_err(sensor->dev,
-			"Register %d not supported on this variant\n", reg);
-		if (err)
-			*err = -EOPNOTSUPP;
-		return -EOPNOTSUPP;
-	}
-
-	return cci_read(sensor->regmap, physical_addr, val, err);
+	return cci_read(sensor->regmap, addr, val, err);
 }
 
-static int vd55g_cci_write(struct vd55g *sensor, enum vd55g_reg_id reg, u32 val,
+static int vd55g_cci_write_ctx_offset(struct vd55g *sensor, enum vd55g_reg_id reg, u8 ctx, u8 offset, u32 val,
 			   int *err)
 {
-	u32 physical_addr;
+	u32 addr;
+	int ret;
 
 	if (err && *err)
 		return *err;
 
-	physical_addr = sensor->info->reg_map[reg];
+	ret = vd55g_get_ctx_addr(sensor, reg, ctx, offset, &addr, err);
+	if (ret)
+		return ret;
 
-	if (!physical_addr) {
-		dev_err(sensor->dev,
-			"Register %d not supported on this variant\n", reg);
-		if (err)
-			*err = -EOPNOTSUPP;
-		return -EOPNOTSUPP;
-	}
-
-	return cci_write(sensor->regmap, physical_addr, val, err);
+	return cci_write(sensor->regmap, addr, val, err);
 }
 
-static int vd55g_write_array(struct vd55g *sensor, u32 reg, unsigned int len,
+static int vd55g_write_array(struct vd55g *sensor, enum vd55g_reg_id reg, unsigned int len,
 			     const u8 *array, int *err)
 {
 	unsigned int chunk_sz = 1024;
 	unsigned int sz;
+	u32 addr;
 	int ret = 0;
 
 	if (err && *err)
 		return *err;
+
+	ret = vd55g_get_ctx_addr(sensor, reg, 0, 0, &addr, err);
+	if (ret)
+		return ret;
 
 	/*
 	 * This loop isn't necessary but in certains conditions (platforms, cpu
@@ -1004,11 +1027,11 @@ static int vd55g_write_array(struct vd55g *sensor, u32 reg, unsigned int len,
 	 */
 	while (len) {
 		sz = min(len, chunk_sz);
-		ret = regmap_bulk_write(sensor->regmap, reg, array, sz);
+		ret = regmap_bulk_write(sensor->regmap, addr, array, sz);
 		if (ret < 0)
 			goto out;
 		len -= sz;
-		reg += sz;
+		addr += sz;
 		array += sz;
 	}
 
@@ -1019,15 +1042,20 @@ out:
 	return ret;
 }
 
-static int vd55g_poll_reg(struct vd55g *sensor, u32 reg, u8 poll_val, int *err)
+static int vd55g_poll_reg(struct vd55g *sensor, enum vd55g_reg_id reg, u8 poll_val, int *err)
 {
 	unsigned int val = 0;
+	u32 addr;
 	int ret;
 
 	if (err && *err)
 		return *err;
 
-	ret = regmap_read_poll_timeout(sensor->regmap, CCI_REG_ADDR(reg), val,
+	ret = vd55g_get_ctx_addr(sensor, reg, 0, 0, &addr, err);
+	if (ret)
+		return ret;
+
+	ret = regmap_read_poll_timeout(sensor->regmap, CCI_REG_ADDR(addr), val,
 				       (val == poll_val), 2000,
 				       500 * USEC_PER_MSEC);
 
@@ -1039,9 +1067,7 @@ static int vd55g_poll_reg(struct vd55g *sensor, u32 reg, u8 poll_val, int *err)
 
 static int vd55g_wait_state(struct vd55g *sensor, int state, int *err)
 {
-	u32 reg = sensor->info->reg_map[REG_SYSTEM_FSM];
-
-	return vd55g_poll_reg(sensor, reg, state, err);
+	return vd55g_poll_reg(sensor, REG_SYSTEM_FSM, state, err);
 }
 
 static int vd55g_prepare_clock_tree(struct vd55g *sensor)
@@ -1122,7 +1148,7 @@ static int vd55g_update_expo_cluster(struct vd55g *sensor, bool is_auto)
 	int ret = 0;
 
 	if (sensor->ae_ctrl->is_new) {
-		vd55g_write(sensor, VD55G_REG_EXP_MODE(sensor, 0), expo_state,
+		vd55g_cci_write_ctx(sensor, REG_CTX_EXP_MODE, 0, expo_state,
 			    &ret);
 		vd55g_cci_write(sensor, REG_EXPOSURE_MAX_COARSE,
 				sensor->expo_ctrl->maximum, &ret);
@@ -1131,7 +1157,7 @@ static int vd55g_update_expo_cluster(struct vd55g *sensor, bool is_auto)
 	if (sensor->info->hdr) {
 		if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB &&
 		    sensor->hdr_ctrl->is_new) {
-			vd55g_write(sensor, VD55G_REG_EXP_MODE(sensor, 1),
+			vd55g_cci_write_ctx(sensor, REG_CTX_EXP_MODE, 1,
 				    VD55G1_EXP_BYPASS, &ret);
 			if (ret)
 				return ret;
@@ -1161,7 +1187,7 @@ static int vd55g_lock_exposure(struct vd55g *sensor, u32 lock_val)
 	int ret = 0;
 
 	if (sensor->ae_ctrl->val == V4L2_EXPOSURE_AUTO)
-		vd55g_write(sensor, VD55G_REG_EXP_MODE(sensor, 0), expo_state,
+		vd55g_cci_write_ctx(sensor, REG_CTX_EXP_MODE, 0, expo_state,
 			    &ret);
 
 	return ret;
@@ -1194,9 +1220,9 @@ static int vd55g_update_frame_length(struct vd55g *sensor,
 
 	if (sensor->info->hdr)
 		if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB)
-			vd55g_write(sensor, VD55G_REG_FRAME_LENGTH(sensor, 1),
+			vd55g_cci_write_ctx(sensor, REG_CTX_FRAME_LENGTH, 1,
 				    frame_length, &ret);
-	vd55g_write(sensor, VD55G_REG_FRAME_LENGTH(sensor, 0), frame_length,
+	vd55g_cci_write_ctx(sensor, REG_CTX_FRAME_LENGTH, 0, frame_length,
 		    &ret);
 
 	return ret;
@@ -1279,9 +1305,9 @@ static int vd55g_update_hdr_mode(struct vd55g *sensor)
 
 		vd55g_cci_write(sensor, REG_CTX_REPEAT_COUNT_CTX0, 0, &ret);
 
-		vd55g_write(sensor, VD55G_REG_VT_MODE(sensor, 0),
+		vd55g_cci_write_ctx(sensor, REG_CTX_VT_MODE, 0,
 			    VD55G1_VT_MODE_NORMAL, &ret);
-		vd55g_write(sensor, VD55G_REG_MASK_FRAME_CTRL(sensor, 0),
+		vd55g_cci_write_ctx(sensor, REG_CTX_MASK_FRAME_CTRL, 0,
 			    VD55G1_MASK_FRAME_CTRL_OUTPUT, &ret);
 		break;
 	case VD55G1_HDR_SUB:
@@ -1294,17 +1320,17 @@ static int vd55g_update_hdr_mode(struct vd55g *sensor)
 		vd55g_cci_write(sensor, REG_CTX_REPEAT_COUNT_CTX0, 1, &ret);
 		vd55g_cci_write(sensor, REG_CTX_REPEAT_COUNT_CTX1, 1, &ret);
 
-		vd55g_write(sensor, VD55G_REG_VT_MODE(sensor, 0),
+		vd55g_cci_write_ctx(sensor, REG_CTX_VT_MODE, 0,
 			    VD55G1_VT_MODE_NORMAL, &ret);
-		vd55g_write(sensor, VD55G_REG_MASK_FRAME_CTRL(sensor, 0),
+		vd55g_cci_write_ctx(sensor, REG_CTX_MASK_FRAME_CTRL, 0,
 			    VD55G1_MASK_FRAME_CTRL_MASK, &ret);
-		vd55g_write(sensor, VD55G_REG_EXPOSURE_INSTANCE(sensor, 0), 0,
+		vd55g_cci_write_ctx(sensor, REG_CTX_EXPOSURE_INSTANCE, 0, 0,
 			    &ret);
-		vd55g_write(sensor, VD55G_REG_VT_MODE(sensor, 1),
+		vd55g_cci_write_ctx(sensor, REG_CTX_VT_MODE, 1,
 			    VD55G1_VT_MODE_SUBTRACTION, &ret);
-		vd55g_write(sensor, VD55G_REG_MASK_FRAME_CTRL(sensor, 1),
+		vd55g_cci_write_ctx(sensor, REG_CTX_MASK_FRAME_CTRL, 1,
 			    VD55G1_MASK_FRAME_CTRL_OUTPUT, &ret);
-		vd55g_write(sensor, VD55G_REG_EXPOSURE_INSTANCE(sensor, 1), 1,
+		vd55g_cci_write_ctx(sensor, REG_CTX_EXPOSURE_INSTANCE, 1, 1,
 			    &ret);
 		break;
 	default:
@@ -1322,9 +1348,9 @@ static int vd55g_set_framefmt(struct vd55g *sensor,
 	int ret = 0;
 	int x_val, y_val;
 
-	vd55g_write(sensor, VD55G_REG_FORMAT_CTRL,
+	vd55g_cci_write(sensor, REG_FORMAT_CTRL,
 		    vd55g_get_fmt_bpp(format->code), &ret);
-	vd55g_write(sensor, VD55G_REG_OIF_IMG_CTRL,
+	vd55g_cci_write(sensor, REG_OIF_IMG_CTRL,
 		    vd55g_get_fmt_data_type(format->code), &ret);
 
 	switch (crop->width / format->width) {
@@ -1346,19 +1372,19 @@ static int vd55g_set_framefmt(struct vd55g *sensor,
 		y_val = crop->height;
 	}
 
-	vd55g_write(sensor, VD55G_REG_X_START(sensor, 0), crop->left, &ret);
-	vd55g_write(sensor, VD55G_REG_X_WIDTH_OR_END(sensor, 0), x_val, &ret);
-	vd55g_write(sensor, VD55G_REG_Y_START(sensor, 0), crop->top, &ret);
-	vd55g_write(sensor, VD55G_REG_Y_HEIGHT_OR_END(sensor, 0), y_val, &ret);
+	vd55g_cci_write_ctx(sensor, REG_CTX_X_START, 0, crop->left, &ret);
+	vd55g_cci_write_ctx(sensor, REG_CTX_X_WIDTH_OR_END, 0, x_val, &ret);
+	vd55g_cci_write_ctx(sensor, REG_CTX_Y_START, 0, crop->top, &ret);
+	vd55g_cci_write_ctx(sensor, REG_CTX_Y_HEIGHT_OR_END, 0, y_val, &ret);
 
 	if (sensor->info->hdr) {
-		vd55g_write(sensor, VD55G_REG_X_START(sensor, 1), crop->left,
+		vd55g_cci_write_ctx(sensor, REG_CTX_X_START, 1, crop->left,
 			    &ret);
-		vd55g_write(sensor, VD55G_REG_X_WIDTH_OR_END(sensor, 1), x_val,
+		vd55g_cci_write_ctx(sensor, REG_CTX_X_WIDTH_OR_END, 1, x_val,
 			    &ret);
-		vd55g_write(sensor, VD55G_REG_Y_START(sensor, 1), crop->top,
+		vd55g_cci_write_ctx(sensor, REG_CTX_Y_START, 1, crop->top,
 			    &ret);
-		vd55g_write(sensor, VD55G_REG_Y_HEIGHT_OR_END(sensor, 1), y_val,
+		vd55g_cci_write_ctx(sensor, REG_CTX_Y_HEIGHT_OR_END, 1, y_val,
 			    &ret);
 	}
 
@@ -1380,15 +1406,15 @@ static int vd55g_update_gpios(struct vd55g *sensor, unsigned long gpio_mask)
 			if (sensor->info->hdr) {
 				if (sensor->hdr_ctrl->val == VD55G1_HDR_SUB) {
 					/* Make its context 1 counterpart strobe too */
-					vd55g_write(sensor,
-						    VD55G_REG_GPIO_CTRL(sensor,
-									1, io),
+					vd55g_cci_write_ctx_offset(sensor,
+						    REG_CTX_GPIO_0_CTRL,
+								1, io,
 						    gpio_val, &ret);
 				}
 			}
 		}
 
-		ret = vd55g_write(sensor, VD55G_REG_GPIO_CTRL(sensor, 0, io),
+		ret = vd55g_cci_write_ctx_offset(sensor, REG_CTX_GPIO_0_CTRL, 0, io,
 				  gpio_val, &ret);
 	}
 
@@ -1397,7 +1423,7 @@ static int vd55g_update_gpios(struct vd55g *sensor, unsigned long gpio_mask)
 
 static int vd55g_ro_ctrls_setup(struct vd55g *sensor, struct v4l2_rect *crop)
 {
-	return vd55g_write(sensor, VD55G_REG_LINE_LENGTH,
+	return vd55g_cci_write(sensor, REG_LINE_LENGTH,
 			   crop->width + sensor->hblank_ctrl->val, NULL);
 }
 
@@ -1425,8 +1451,8 @@ static int vd55g_enable_streams(struct v4l2_subdev *sd,
 		return ret;
 
 	/* Configure output */
-	vd55g_write(sensor, VD55G_REG_MIPI_DATA_RATE, sensor->mipi_rate, &ret);
-	vd55g_write(sensor, VD55G_REG_OIF_CTRL, sensor->oif_ctrl, &ret);
+	vd55g_cci_write(sensor, REG_MIPI_DATA_RATE, sensor->mipi_rate, &ret);
+	vd55g_cci_write(sensor, REG_OIF_CTRL, sensor->oif_ctrl, &ret);
 	vd55g_cci_write(sensor, REG_ISL_ENABLE, 0, &ret);
 	if (ret)
 		goto err_rpm_put;
@@ -1455,8 +1481,8 @@ static int vd55g_enable_streams(struct v4l2_subdev *sd,
 		goto err_rpm_put;
 
 	/* Start streaming */
-	vd55g_write(sensor, VD55G_REG_STBY, VD55G_STBY_START_STREAM, &ret);
-	vd55g_poll_reg(sensor, VD55G_REG_STBY, 0, &ret);
+	vd55g_cci_write(sensor, REG_STBY, VD55G_STBY_START_STREAM, &ret);
+	vd55g_poll_reg(sensor, REG_STBY, 0, &ret);
 	vd55g_wait_state(sensor, VD55G_SYSTEM_FSM_STREAMING, &ret);
 	if (ret)
 		goto err_rpm_put;
@@ -1480,9 +1506,9 @@ static int vd55g_disable_streams(struct v4l2_subdev *sd,
 	/* Retrieve Expo cluster to enable coldstart of AE */
 	ret = vd55g_read_expo_cluster(sensor);
 
-	vd55g_write(sensor, VD55G_REG_STREAMING, VD55G_STREAMING_STOP_STREAM,
+	vd55g_cci_write(sensor, REG_STREAMING, VD55G_STREAMING_STOP_STREAM,
 		    &ret);
-	vd55g_poll_reg(sensor, VD55G_REG_STREAMING, 0, &ret);
+	vd55g_poll_reg(sensor, REG_STREAMING, 0, &ret);
 	vd55g_wait_state(sensor, VD55G_SYSTEM_FSM_SW_STBY, &ret);
 
 	if (ret)
@@ -1534,10 +1560,10 @@ static int vd55g_load_and_apply_patch(struct vd55g *sensor,
 		return -EINVAL;
 	}
 
-	vd55g_write_array(sensor, VD55G_REG_FWPATCH_START_ADDR, fw->size,
+	vd55g_write_array(sensor, REG_FWPATCH_START_ADDR, fw->size,
 			  fw->data, &ret);
-	vd55g_write(sensor, VD55G_REG_BOOT, VD55G_BOOT_PATCH, &ret);
-	vd55g_poll_reg(sensor, VD55G_REG_BOOT, 0, &ret);
+	vd55g_cci_write(sensor, REG_BOOT, VD55G_BOOT_PATCH, &ret);
+	vd55g_poll_reg(sensor, REG_BOOT, 0, &ret);
 	if (ret) {
 		dev_err(sensor->dev, "Failed to apply patch\n");
 		return ret;
@@ -1582,7 +1608,7 @@ static int vd55g_boot(struct vd55g *sensor)
 	u64 rev;
 	const struct vd55g_fw_revision_map *fw_info;
 
-	ret = vd55g_read(sensor, VD55G_REG_REVISION, &rev, NULL);
+	ret = vd55g_cci_read(sensor, REG_REVISION, &rev, NULL);
 	if (ret)
 		return ret;
 
@@ -1598,8 +1624,8 @@ static int vd55g_boot(struct vd55g *sensor)
 		vd55g_load_and_apply_patch(sensor, fw_info);
 
 	if (!fw_info->needs_patch || sensor->info->needs_patch_boot) {
-		vd55g_write(sensor, VD55G_REG_BOOT, VD55G_BOOT_BOOT, &ret);
-		vd55g_poll_reg(sensor, VD55G_REG_BOOT, 0, &ret);
+		vd55g_cci_write(sensor, REG_BOOT, VD55G_BOOT_BOOT, &ret);
+		vd55g_poll_reg(sensor, REG_BOOT, 0, &ret);
 		if (ret) {
 			dev_err(sensor->dev, "Failed to boot\n");
 			return ret;
@@ -1886,7 +1912,7 @@ static int vd55g_s_ctrl(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
-		ret = vd55g_write(sensor, VD55G_REG_ORIENTATION,
+		ret = vd55g_cci_write(sensor, REG_ORIENTATION,
 				  sensor->hflip_ctrl->val |
 					  (sensor->vflip_ctrl->val << 1),
 				  NULL);
@@ -2053,7 +2079,7 @@ static int vd55g_detect(struct vd55g *sensor)
 	if (ret)
 		return ret;
 
-	ret = vd55g_read(sensor, VD55G_REG_MODEL_ID, &id, NULL);
+	ret = vd55g_cci_read(sensor, REG_MODEL_ID, &id, NULL);
 	if (ret)
 		return ret;
 
@@ -2099,7 +2125,7 @@ static int vd55g_power_on(struct device *dev)
 		goto disable_clock;
 
 	/* Setup clock now to advance through system FSM states */
-	vd55g_write(sensor, VD55G_REG_EXT_CLOCK, sensor->xclk_freq, &ret);
+	vd55g_cci_write(sensor, REG_EXT_CLOCK, sensor->xclk_freq, &ret);
 
 	ret = vd55g_boot(sensor);
 	if (ret) {
