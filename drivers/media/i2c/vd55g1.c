@@ -947,26 +947,27 @@ static void vd55g1_get_frame_timings(struct vd55g1 *sensor,
 }
 
 static inline int vd55g1_get_ctx_addr(struct vd55g1 *sensor,
-				     enum vd55g1_reg_id reg, u8 ctx, u8 offset, u32 *addr, int *err)
+				     enum vd55g1_reg_id reg, u8 ctx, u8 offset, u32 *addr)
 {
 	u32 base_addr;
 	u32 stride;
+	int ret;
 
 	base_addr = sensor->info->reg_map[reg];
 
 	if (!base_addr) {
 		dev_err(sensor->dev,
 			"Register %d not supported on this variant\n", reg);
-		if (err)
-			*err = -EOPNOTSUPP;
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto out;
 	}
 
 	stride = sensor->info->reg_map[REG_CTX_STRIDE];
 
 	*addr = base_addr + ctx * stride + offset;
 
-	return 0;
+out:
+	return ret;
 }
 
 #define vd55g1_read(sensor, reg, val, err) \
@@ -990,7 +991,7 @@ static int vd55g1_read_ctx_offset(struct vd55g1 *sensor, enum vd55g1_reg_id reg,
 	if (err && *err)
 		return *err;
 
-	ret = vd55g1_get_ctx_addr(sensor, reg, ctx, offset, &addr, err);
+	ret = vd55g1_get_ctx_addr(sensor, reg, ctx, offset, &addr);
 	if (ret)
 		return ret;
 
@@ -1006,7 +1007,7 @@ static int vd55g1_write_ctx_offset(struct vd55g1 *sensor, enum vd55g1_reg_id reg
 	if (err && *err)
 		return *err;
 
-	ret = vd55g1_get_ctx_addr(sensor, reg, ctx, offset, &addr, err);
+	ret = vd55g1_get_ctx_addr(sensor, reg, ctx, offset, &addr);
 	if (ret)
 		return ret;
 
@@ -1024,7 +1025,7 @@ static int vd55g1_write_array(struct vd55g1 *sensor, enum vd55g1_reg_id reg, uns
 	if (err && *err)
 		return *err;
 
-	ret = vd55g1_get_ctx_addr(sensor, reg, 0, 0, &addr, err);
+	ret = vd55g1_get_ctx_addr(sensor, reg, 0, 0, &addr);
 	if (ret)
 		return ret;
 
@@ -1058,7 +1059,7 @@ static int vd55g1_poll_reg(struct vd55g1 *sensor, enum vd55g1_reg_id reg, u8 pol
 	if (err && *err)
 		return *err;
 
-	ret = vd55g1_get_ctx_addr(sensor, reg, 0, 0, &addr, err);
+	ret = vd55g1_get_ctx_addr(sensor, reg, 0, 0, &addr);
 	if (ret)
 		return ret;
 
@@ -2383,7 +2384,7 @@ static int vd55g1_probe(struct i2c_client *client)
 
 	ret = vd55g1_parse_dt(sensor);
 	if (ret)
-		return dev_err_probe(dev, ret, "Failed to parse Device Tree\n");
+		return ret;
 
 	/* Get (and check) resources : power regs, ext clock, reset gpio */
 	ret = vd55g1_get_regulators(sensor);
