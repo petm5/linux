@@ -128,9 +128,11 @@ enum vd55g1_reg_id {
 	REG_CTX_EXP_MODE,
 	REG_CTX_FRAME_LENGTH,
 	REG_CTX_X_START,
-	REG_CTX_X_WIDTH_OR_END,
+	REG_CTX_X_WIDTH,
+	REG_CTX_X_END,
 	REG_CTX_Y_START,
-	REG_CTX_Y_HEIGHT_OR_END,
+	REG_CTX_Y_HEIGHT,
+	REG_CTX_Y_END,
 	REG_CTX_GPIO_0_CTRL,
 	/* HDR-specific */
 	REG_CTX_VT_MODE,
@@ -179,9 +181,9 @@ static const int vd55g0_reg_map[REG_MAX_INDEX] = {
 	[REG_CTX_EXP_MODE] = CCI_REG8(0x044c),
 	[REG_CTX_FRAME_LENGTH] = CCI_REG32_LE(0x0458),
 	[REG_CTX_X_START] = CCI_REG16_LE(0x045e),
-	[REG_CTX_X_WIDTH_OR_END] = CCI_REG16_LE(0x0460),
+	[REG_CTX_X_END] = CCI_REG16_LE(0x0460),
 	[REG_CTX_Y_START] = CCI_REG16_LE(0x0462),
-	[REG_CTX_Y_HEIGHT_OR_END] = CCI_REG16_LE(0x0464),
+	[REG_CTX_Y_END] = CCI_REG16_LE(0x0464),
 	[REG_CTX_GPIO_0_CTRL] = CCI_REG8(0x0467),
 };
 
@@ -225,9 +227,9 @@ static const int vd55g1_reg_map[REG_MAX_INDEX] = {
 	[REG_CTX_EXP_MODE] = CCI_REG8(0x0500),
 	[REG_CTX_FRAME_LENGTH] = CCI_REG32_LE(0x050c),
 	[REG_CTX_X_START] = CCI_REG16_LE(0x0514),
-	[REG_CTX_X_WIDTH_OR_END] = CCI_REG16_LE(0x0516),
+	[REG_CTX_X_WIDTH] = CCI_REG16_LE(0x0516),
 	[REG_CTX_Y_START] = CCI_REG16_LE(0x0510),
-	[REG_CTX_Y_HEIGHT_OR_END] = CCI_REG16_LE(0x0512),
+	[REG_CTX_Y_HEIGHT] = CCI_REG16_LE(0x0512),
 	[REG_CTX_GPIO_0_CTRL] = CCI_REG8(0x051d),
 	[REG_CTX_VT_MODE] = CCI_REG8(0x0536),
 	[REG_CTX_MASK_FRAME_CTRL] = CCI_REG8(0x0537),
@@ -1357,7 +1359,6 @@ static int vd55g1_set_framefmt(struct vd55g1 *sensor,
 {
 	u8 binning;
 	int ret = 0;
-	int x_val, y_val;
 
 	vd55g1_write(sensor, REG_FORMAT_CTRL,
 		    vd55g1_get_fmt_bpp(format->code), &ret);
@@ -1375,28 +1376,31 @@ static int vd55g1_set_framefmt(struct vd55g1 *sensor,
 	}
 	vd55g1_write(sensor, REG_READOUT_CTRL, binning, &ret);
 
+	vd55g1_write_ctx(sensor, REG_CTX_X_START, 0, crop->left, &ret);
+	vd55g1_write_ctx(sensor, REG_CTX_Y_START, 0, crop->top, &ret);
+
 	if (sensor->info->absolute_endpoints) {
-		x_val = crop->left + crop->width - 1;
-		y_val = crop->top + crop->height - 1;
+		vd55g1_write_ctx(sensor, REG_CTX_X_END, 0,
+		                 crop->left + crop->width - 1, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_END, 0,
+		                 crop->top + crop->height - 1, &ret);
 	} else {
-		x_val = crop->width;
-		y_val = crop->height;
+		vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 0,
+		                 crop->width, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 0,
+		                 crop->height, &ret);
 	}
 
-	vd55g1_write_ctx(sensor, REG_CTX_X_START, 0, crop->left, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH_OR_END, 0, x_val, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_Y_START, 0, crop->top, &ret);
-	vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT_OR_END, 0, y_val, &ret);
-
-	if (sensor->info->hdr) {
-		vd55g1_write_ctx(sensor, REG_CTX_X_START, 1, crop->left,
-			    &ret);
-		vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH_OR_END, 1, x_val,
-			    &ret);
-		vd55g1_write_ctx(sensor, REG_CTX_Y_START, 1, crop->top,
-			    &ret);
-		vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT_OR_END, 1, y_val,
-			    &ret);
+	if (sensor->info->hdr &&
+		!sensor->info->absolute_endpoints) {
+		vd55g1_write_ctx(sensor, REG_CTX_X_START, 1,
+		                 crop->left, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_START, 1,
+		                 crop->top, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_X_WIDTH, 1,
+		                 crop->width, &ret);
+		vd55g1_write_ctx(sensor, REG_CTX_Y_HEIGHT, 1,
+		                 crop->height, &ret);
 	}
 
 	return ret;
