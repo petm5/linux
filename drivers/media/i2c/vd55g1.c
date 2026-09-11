@@ -536,6 +536,7 @@ struct vd55g1_patch_header {
 struct vd55g1_rev_info {
 	u64 revision;
 	bool needs_patch;
+	const char *ext_fw_name;
 	const struct firmware *builtin_fw;
 };
 
@@ -555,6 +556,7 @@ static const struct vd55g1_rev_info vd55g1_revisions[] = {
 	{
 		.revision = 0x2020,
 		.needs_patch = true,
+		.ext_fw_name = "vd55g1.bin",
 		.builtin_fw = &vd55g1_builtin_fw
 	},
 };
@@ -1278,9 +1280,25 @@ static int vd55g1_apply_patch(struct vd55g1 *sensor,
 static int vd55g1_boot(struct vd55g1 *sensor)
 {
 	int ret = 0;
+	const struct firmware *fw;
 
 	if (sensor->rev_info->needs_patch) {
-		ret = vd55g1_apply_patch(sensor, sensor->rev_info->builtin_fw);
+		ret = request_firmware(&fw, sensor->rev_info->ext_fw_name, sensor->dev);
+
+		if (ret == -ENOENT && sensor->rev_info->builtin_fw) {
+			dev_dbg(sensor->dev,
+				"External firmware %s not found, using built-in defaults\n",
+				sensor->rev_info->ext_fw_name);
+			fw = sensor->rev_info->builtin_fw;
+		} else if (ret) {
+			dev_dbg(sensor->dev,
+				"Failed to load required firmware %s: %d\n",
+				sensor->rev_info->ext_fw_name,
+				ret);
+			return ret;
+		}
+
+		ret = vd55g1_apply_patch(sensor, fw);
 		if (ret)
 			return ret;
 	} else {
@@ -2182,4 +2200,5 @@ module_i2c_driver(vd55g1_i2c_driver);
 MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@foss.st.com>");
 MODULE_AUTHOR("Sylvain Petinot <sylvain.petinot@foss.st.com>");
 MODULE_DESCRIPTION("VD55G1 camera subdev driver");
+MODULE_FIRMWARE("vd55g1.bin");
 MODULE_LICENSE("GPL");
