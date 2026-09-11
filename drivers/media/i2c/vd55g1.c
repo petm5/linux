@@ -135,9 +135,6 @@
 #define VD55G1_MIPI_RATE_MIN				(250 * MEGA)
 #define VD55G1_MIPI_RATE_MAX				(1200 * MEGA)
 
-#define VD55G1_MODEL_ID_NAME(id) \
-	((id) == VD55G1_MODEL_ID_VD55G1 ? "vd55g1" : "vd65g4")
-
 static const u8 vd55g1_patch_array[] = {
 	0x44, 0x03, 0x09, 0x02, 0xe6, 0x01, 0x42, 0x00, 0xea, 0x01, 0x42, 0x00,
 	0xf0, 0x01, 0x42, 0x00, 0xe6, 0x01, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -535,15 +532,33 @@ struct vd55g1_frame_timings {
 	u16 expo_max;
 };
 
+struct vd55g1_chip_info {
+	unsigned int id;
+	const char *name;
+	bool bayer;
+};
+
+static const struct vd55g1_chip_info vd55g1_chip_info = {
+	.id = 0x53354731,
+	.name = "vd55g1",
+	.bayer = false,
+};
+
+static const struct vd55g1_chip_info vd65g4_chip_info = {
+	.id = 0x53354733,
+	.name = "vd65g4",
+	.bayer = true,
+};
+
 struct vd55g1 {
 	struct device *dev;
-	unsigned int id;
 	struct v4l2_subdev sd;
 	struct media_pad pad;
 	struct regulator_bulk_data supplies[ARRAY_SIZE(vd55g1_supply_name)];
 	struct gpio_desc *reset_gpio;
 	struct clk *xclk;
 	struct regmap *regmap;
+	const struct vd55g1_chip_info *info;
 	u32 xclk_freq;
 	u16 oif_ctrl;
 	u8 gpios[VD55G1_NB_GPIOS];
@@ -630,7 +645,7 @@ static u32 vd55g1_get_fmt_code(struct vd55g1 *sensor, u32 code)
 {
 	unsigned int i, j;
 
-	if (sensor->id == VD55G1_MODEL_ID_VD55G1)
+	if (!sensor->info->bayer)
 		return code;
 
 	for (i = 0; i < ARRAY_SIZE(vd55g1_mbus_formats_bayer); i++) {
@@ -1188,7 +1203,7 @@ static int vd55g1_patch(struct vd55g1 *sensor)
 	int ret = 0;
 
 	/* vd55g1 needs a patch while vd65g4 does not */
-	if (sensor->id == VD55G1_MODEL_ID_VD55G1) {
+	if (sensor->info->id == VD55G1_MODEL_ID_VD55G1) {
 		vd55g1_write_array(sensor, VD55G1_REG_FWPATCH_START_ADDR,
 				   sizeof(vd55g1_patch_array),
 				   vd55g1_patch_array, &ret);
@@ -1260,7 +1275,7 @@ static int vd55g1_enum_mbus_code(struct v4l2_subdev *sd,
 	struct vd55g1 *sensor = to_vd55g1(sd);
 	u32 base_code;
 
-	if (sensor->id == VD55G1_MODEL_ID_VD55G1) {
+	if (!sensor->info->bayer) {
 		if (code->index >= ARRAY_SIZE(vd55g1_mbus_formats_mono))
 			return -EINVAL;
 		base_code = vd55g1_mbus_formats_mono[code->index];
@@ -1657,8 +1672,7 @@ unlock_state:
 
 static int vd55g1_detect(struct vd55g1 *sensor)
 {
-	unsigned int dt_id = (uintptr_t)device_get_match_data(sensor->dev);
-	u64 rev, id;
+	u64 id, rev;
 	int ret;
 
 	ret = vd55g1_read(sensor, VD55G1_REG_MODEL_ID, &id, NULL);
@@ -1668,17 +1682,12 @@ static int vd55g1_detect(struct vd55g1 *sensor)
 		return ret;
 	}
 
-	if (id != VD55G1_MODEL_ID_VD55G1 && id != VD55G1_MODEL_ID_VD65G4) {
-		dev_dbg(sensor->dev, "Unsupported sensor id 0x%x\n",
-			 (u32)id);
+	if (id != sensor->info->id) {
+		dev_dbg(sensor->dev,
+			"Expected %s (0x%x), but detected mismatched sensor id 0x%x\n",
+			sensor->info->name, (u32)sensor->info->id, (u32)id);
 		return -ENODEV;
 	}
-	if (id != dt_id) {
-		dev_dbg(sensor->dev, "Probed sensor %s and device tree definition (%s) mismatch",
-			VD55G1_MODEL_ID_NAME(id), VD55G1_MODEL_ID_NAME(dt_id));
-		return -ENODEV;
-	}
-	sensor->id = id;
 
 	ret = vd55g1_read(sensor, VD55G1_REG_REVISION, &rev, NULL);
 	if (ret) {
@@ -1690,7 +1699,7 @@ static int vd55g1_detect(struct vd55g1 *sensor)
 	if ((id == VD55G1_MODEL_ID_VD55G1 && rev != VD55G1_REVISION_CCB) &&
 	    (id == VD55G1_MODEL_ID_VD65G4 && rev != VD55G1_REVISION_BAYER)) {
 		dev_dbg(sensor->dev, "Unsupported sensor revision 0x%x for sensor %s\n",
-			(u16)rev, VD55G1_MODEL_ID_NAME(id));
+			(u16)rev, sensor->info->name);
 		return -ENODEV;
 	}
 
@@ -1983,6 +1992,8 @@ static int vd55g1_probe(struct i2c_client *client)
 		return -ENOMEM;
 	sensor->dev = &client->dev;
 
+	sensor->info = device_get_match_data(dev);
+
 	v4l2_i2c_subdev_init(&sensor->sd, client, &vd55g1_subdev_ops);
 
 	ret = vd55g1_parse_dt(sensor);
@@ -2068,8 +2079,8 @@ static void vd55g1_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id vd55g1_dt_ids[] = {
-	{ .compatible = "st,vd55g1", .data = (void *)VD55G1_MODEL_ID_VD55G1 },
-	{ .compatible = "st,vd65g4", .data = (void *)VD55G1_MODEL_ID_VD65G4 },
+	{ .compatible = "st,vd55g1", .data = &vd55g1_chip_info },
+	{ .compatible = "st,vd65g4", .data = &vd65g4_chip_info },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, vd55g1_dt_ids);
