@@ -1746,16 +1746,19 @@ static int vd55g1_power_off(struct device *dev)
 	return 0;
 }
 
-static int vd55g1_check_csi_conf(struct vd55g1 *sensor,
-				 struct fwnode_handle *endpoint)
+static int vd55g1_check_csi_conf(struct vd55g1 *sensor)
 {
 	struct v4l2_fwnode_endpoint ep = { .bus_type = V4L2_MBUS_CSI2_DPHY };
+	struct fwnode_handle *fwnode;
 	u8 n_lanes;
 	int ret;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &ep);
+	fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(sensor->dev),
+						   0, 0, 0);
+
+	ret = v4l2_fwnode_endpoint_alloc_parse(fwnode, &ep);
 	if (ret)
-		return -EINVAL;
+		goto fwnode;
 
 	/* Check lanes number */
 	n_lanes = ep.bus.mipi_csi2.num_data_lanes;
@@ -1792,6 +1795,9 @@ static int vd55g1_check_csi_conf(struct vd55g1 *sensor,
 
 done:
 	v4l2_fwnode_endpoint_free(&ep);
+
+fwnode:
+	fwnode_handle_put(fwnode);
 
 	return ret;
 }
@@ -1854,18 +1860,9 @@ static int vd55g1_parse_dt_gpios(struct vd55g1 *sensor)
 
 static int vd55g1_parse_dt(struct vd55g1 *sensor)
 {
-	struct fwnode_handle *endpoint;
 	int ret;
 
-	endpoint = fwnode_graph_get_endpoint_by_id(dev_fwnode(sensor->dev),
-						   0, 0, 0);
-	if (!endpoint) {
-		dev_err(sensor->dev, "Endpoint node not found\n");
-		return -EINVAL;
-	}
-
-	ret = vd55g1_check_csi_conf(sensor, endpoint);
-	fwnode_handle_put(endpoint);
+	ret = vd55g1_check_csi_conf(sensor);
 	if (ret)
 		return ret;
 
