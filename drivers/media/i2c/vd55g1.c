@@ -1893,6 +1893,11 @@ static int vd55g1_parse_dt_gpios(struct vd55g1 *sensor)
 		set_bit(led_gpios[i], &sensor->ext_leds_mask);
 	}
 
+	if (nb_gpios_leds == 0) {
+		sensor->gpios[1] = VD55G1_GPIO_MODE_STROBE;
+		set_bit(1, &sensor->ext_leds_mask);
+	}
+
 	return 0;
 }
 
