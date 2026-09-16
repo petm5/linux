@@ -17,6 +17,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/unaligned.h>
 #include <linux/units.h>
+#include <linux/firmware.h>
 
 #include <media/mipi-csi2.h>
 #include <media/v4l2-async.h>
@@ -42,7 +43,7 @@
 #define VD55G1_SYSTEM_FSM_STREAMING			0x03
 #define VD55G1_REG_BOOT					CCI_REG8(0x0200)
 #define VD55G1_BOOT_BOOT				1
-#define VD55G1_BOOT_PATCH_AND_BOOT			2
+#define VD55G1_BOOT_PATCH 				2
 #define VD55G1_REG_STBY					CCI_REG8(0x0201)
 #define VD55G1_STBY_START_STREAM			1
 #define VD55G1_REG_STREAMING				CCI_REG8(0x0202)
@@ -533,6 +534,16 @@ struct vd55g1_vblank_limits {
 struct vd55g1_frame_timings {
 	u16 frame_length;
 	u16 expo_max;
+};
+
+struct vd55g1_patch_header {
+	__le16 patch_size;
+	u8 minor;
+	u8 major;
+} __packed;
+
+static const struct firmware vd55g1_builtin_fw = {
+	.data = vd55g1_patch_array, .size = ARRAY_SIZE(vd55g1_patch_array)
 };
 
 struct vd55g1 {
@@ -1182,52 +1193,76 @@ static int vd55g1_disable_streams(struct v4l2_subdev *sd,
 	return ret;
 }
 
-static int vd55g1_patch(struct vd55g1 *sensor)
+static int vd55g1_apply_patch(struct vd55g1 *sensor,
+				      const struct firmware *fw)
 {
-	u64 patch;
+	const struct vd55g1_patch_header *hdr;
+	u16 payload_len;
+	u64 hardware_version;
+	int ret;
+
+	hdr = (const struct vd55g1_patch_header *)fw->data;
+	payload_len = le16_to_cpu(hdr->patch_size);
+
+	if (fw->size < sizeof(*hdr)) {
+		dev_dbg(sensor->dev,
+			"Patch data is too small to contain a header\n");
+		return -EINVAL;
+	}
+
+	if (payload_len > fw->size) {
+		dev_dbg(sensor->dev,
+			"Patch payload length mismatch in header\n");
+		return -EINVAL;
+	}
+
+	vd55g1_write_array(sensor, VD55G1_REG_FWPATCH_START_ADDR, fw->size,
+			  fw->data, &ret);
+	vd55g1_write(sensor, VD55G1_REG_BOOT, VD55G1_BOOT_PATCH, &ret);
+	vd55g1_poll_reg(sensor, VD55G1_REG_BOOT, 0, &ret);
+	vd55g1_read(sensor, VD55G1_REG_FWPATCH_REVISION, &hardware_version,
+			     &ret);
+	if (ret) {
+		dev_dbg(sensor->dev, "Sensor patch failed: %d\n", ret);
+		return ret;
+	}
+
+	if ((hardware_version & 0xFFFF) != ((hdr->major << 8) | hdr->minor)) {
+		dev_dbg(sensor->dev,
+			"Bad patch version: expected %d.%d, got %d.%d\n",
+			hdr->major, hdr->minor, (u8)(hardware_version >> 8),
+			(u8)(hardware_version & 0xff));
+		return -ENODEV;
+	}
+
+	dev_dbg(sensor->dev, "Patch %d.%d applied\n",
+		(u8)(hardware_version >> 8), (u8)(hardware_version & 0xff));
+
+	return ret;
+}
+
+static int vd55g1_boot(struct vd55g1 *sensor)
+{
 	int ret = 0;
 
-	/* vd55g1 needs a patch while vd65g4 does not */
 	if (sensor->id == VD55G1_MODEL_ID_VD55G1) {
-		vd55g1_write_array(sensor, VD55G1_REG_FWPATCH_START_ADDR,
-				   sizeof(vd55g1_patch_array),
-				   vd55g1_patch_array, &ret);
-		vd55g1_write(sensor, VD55G1_REG_BOOT,
-			     VD55G1_BOOT_PATCH_AND_BOOT, &ret);
-		vd55g1_poll_reg(sensor, VD55G1_REG_BOOT, 0, &ret);
-		if (ret) {
-			dev_dbg(sensor->dev, "Failed to apply patch\n");
+		ret = vd55g1_apply_patch(sensor, &vd55g1_builtin_fw);
+		if (ret)
 			return ret;
-		}
-
-		vd55g1_read(sensor, VD55G1_REG_FWPATCH_REVISION, &patch, &ret);
-		if (patch != (VD55G1_FWPATCH_REVISION_MAJOR << 8) +
-		    VD55G1_FWPATCH_REVISION_MINOR) {
-			dev_dbg(sensor->dev, "Bad patch version expected %d.%d got %d.%d\n",
-				VD55G1_FWPATCH_REVISION_MAJOR,
-				VD55G1_FWPATCH_REVISION_MINOR,
-				(u8)(patch >> 8), (u8)(patch & 0xff));
-			return -ENODEV;
-		}
-		dev_dbg(sensor->dev, "patch %d.%d applied\n",
-			(u8)(patch >> 8), (u8)(patch & 0xff));
-
 	} else {
 		vd55g1_write(sensor, VD55G1_REG_BOOT, VD55G1_BOOT_BOOT, &ret);
 		vd55g1_poll_reg(sensor, VD55G1_REG_BOOT, 0, &ret);
 		if (ret) {
-			dev_dbg(sensor->dev, "Failed to boot\n");
+			dev_dbg(sensor->dev, "Sensor boot failed: %d\n", ret);
 			return ret;
 		}
 	}
 
-	ret = vd55g1_wait_state(sensor, VD55G1_SYSTEM_FSM_SW_STBY, NULL);
-	if (ret) {
-		dev_dbg(sensor->dev, "Sensor waiting after boot failed\n");
-		return ret;
-	}
+	vd55g1_wait_state(sensor, VD55G1_SYSTEM_FSM_SW_STBY, &ret);
+	if (ret)
+		dev_dbg(sensor->dev, "Sensor waiting after boot failed: %d\n", ret);
 
-	return 0;
+	return ret;
 }
 
 static int vd55g1_get_selection(struct v4l2_subdev *sd,
@@ -1735,7 +1770,7 @@ static int vd55g1_power_on(struct vd55g1 *sensor)
 		goto disable_clock;
 	}
 
-	ret = vd55g1_patch(sensor);
+	ret = vd55g1_boot(sensor);
 	if (ret)
 		goto disable_clock;
 
