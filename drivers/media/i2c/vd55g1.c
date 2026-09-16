@@ -17,6 +17,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/unaligned.h>
 #include <linux/units.h>
+#include <linux/firmware.h>
 
 #include <media/mipi-csi2.h>
 #include <media/v4l2-async.h>
@@ -1207,7 +1208,8 @@ struct vd55g1_frame_timings {
 struct vd55g1_rev_info {
 	u64 revision;
 	bool needs_patch;
-	const struct vd55g1_firmware *builtin_fw;
+	const struct firmware *builtin_fw;
+	const char *ext_fw_name;
 };
 
 struct vd55g1_chip_info {
@@ -1230,43 +1232,38 @@ struct vd55g1_chip_info {
 	bool implicit_patch_boot;
 };
 
-struct vd55g1_firmware {
-	size_t size;
-	const u8 *data;
-	u8 rev_major;
-	u8 rev_minor;
-};
+struct vd55g1_patch_header {
+	__le16 patch_size;
+	u8 minor;
+	u8 major;
+} __packed;
 
-static const struct vd55g1_firmware vd55g0_cut1_builtin_fw = {
+static const struct firmware vd55g0_cut1_builtin_fw = {
 	.data = vd55g0_cut1_patch_array,
 	.size = ARRAY_SIZE(vd55g0_cut1_patch_array),
-	.rev_major = 2,
-	.rev_minor = 11,
 };
 
-static const struct vd55g1_firmware vd55g0_cut2_builtin_fw = {
+static const struct firmware vd55g0_cut2_builtin_fw = {
 	.data = vd55g0_cut2_patch_array,
 	.size = ARRAY_SIZE(vd55g0_cut2_patch_array),
-	.rev_major = 0,
-	.rev_minor = 5,
 };
 
-static const struct vd55g1_firmware vd55g1_builtin_fw = {
+static const struct firmware vd55g1_builtin_fw = {
 	.data = vd55g1_patch_array,
 	.size = ARRAY_SIZE(vd55g1_patch_array),
-	.rev_major = 2,
-	.rev_minor = 9,
 };
 
 static const struct vd55g1_rev_info vd55g0_revisions[] = {
 	{
 		.revision = 0x1111,
 		.needs_patch = true,
+		.ext_fw_name = "vd55g0-cut1.bin",
 		.builtin_fw = &vd55g0_cut1_builtin_fw,
 	},
 	{
 		.revision = 0x1120,
 		.needs_patch = true,
+		.ext_fw_name = "vd55g0-cut2.bin",
 		.builtin_fw = &vd55g0_cut2_builtin_fw,
 	},
 };
@@ -1275,6 +1272,7 @@ static const struct vd55g1_rev_info vd55g1_revisions[] = {
 	{
 		.revision = 0x2020,
 		.needs_patch = true,
+		.ext_fw_name = "vd55g1.bin",
 		.builtin_fw = &vd55g1_builtin_fw
 	},
 };
@@ -2110,11 +2108,41 @@ static int vd55g1_disable_streams(struct v4l2_subdev *sd,
 
 static int vd55g1_patch(struct vd55g1 *sensor)
 {
-	const struct vd55g1_firmware *fw = sensor->rev_info->builtin_fw;
+	const struct vd55g1_patch_header *hdr;
+	const struct firmware *fw;
 	u64 patch;
 	int ret = 0;
 
 	if (sensor->rev_info->needs_patch) {
+		ret = request_firmware(&fw, sensor->rev_info->ext_fw_name, sensor->dev);
+
+		if (ret == -ENOENT && sensor->rev_info->builtin_fw) {
+			dev_dbg(sensor->dev,
+				"External firmware %s not found, using built-in defaults\n",
+				sensor->rev_info->ext_fw_name);
+			fw = sensor->rev_info->builtin_fw;
+		} else if (ret) {
+			dev_dbg(sensor->dev,
+				"Failed to load required firmware %s: %d\n",
+				sensor->rev_info->ext_fw_name,
+				ret);
+			return ret;
+		}
+
+		hdr = (const struct vd55g1_patch_header *)fw->data;
+
+		if (fw->size < sizeof(*hdr)) {
+			dev_dbg(sensor->dev,
+				"Patch data is too small to contain a header\n");
+			return -EINVAL;
+		}
+
+		if (le16_to_cpu(hdr->patch_size) > fw->size) {
+			dev_dbg(sensor->dev,
+				"Patch payload length mismatch in header\n");
+			return -EINVAL;
+		}
+
 		vd55g1_write_array(sensor, REG_FWPATCH_START_ADDR,
 				   fw->size, fw->data, &ret);
 		vd55g1_write(sensor, REG_BOOT,
@@ -2122,16 +2150,17 @@ static int vd55g1_patch(struct vd55g1 *sensor)
 		vd55g1_poll_reg(sensor, REG_BOOT, 0, &ret);
 		vd55g1_read(sensor, REG_FWPATCH_REVISION, &patch, &ret);
 		if (ret) {
-			dev_dbg(sensor->dev, "Failed to apply patch\n");
+			dev_dbg(sensor->dev, "Sensor patch failed: %d\n", ret);
 			return ret;
 		}
 
-		if (patch != (fw->rev_major << 8) + fw->rev_minor) {
+		if (patch != ((hdr->major << 8) | hdr->minor)) {
 			dev_dbg(sensor->dev, "Bad patch version expected %d.%d got %d.%d\n",
-				fw->rev_major, fw->rev_minor,
+				hdr->major, hdr->minor,
 				(u8)(patch >> 8), (u8)(patch & 0xff));
 			return -ENODEV;
 		}
+
 		dev_dbg(sensor->dev, "patch %d.%d applied\n",
 			(u8)(patch >> 8), (u8)(patch & 0xff));
 	}
@@ -2140,18 +2169,16 @@ static int vd55g1_patch(struct vd55g1 *sensor)
 		vd55g1_write(sensor, REG_BOOT, VD55G1_BOOT_BOOT, &ret);
 		vd55g1_poll_reg(sensor, REG_BOOT, 0, &ret);
 		if (ret) {
-			dev_dbg(sensor->dev, "Failed to boot\n");
+			dev_dbg(sensor->dev, "Failed to boot: %d\n", ret);
 			return ret;
 		}
 	}
 
-	ret = vd55g1_wait_state(sensor, VD55G1_SYSTEM_FSM_SW_STBY, NULL);
-	if (ret) {
-		dev_dbg(sensor->dev, "Sensor waiting after boot failed\n");
-		return ret;
-	}
+	vd55g1_wait_state(sensor, VD55G1_SYSTEM_FSM_SW_STBY, &ret);
+	if (ret)
+		dev_dbg(sensor->dev, "Sensor waiting after boot failed: %d\n", ret);
 
-	return 0;
+	return ret;
 }
 
 static int vd55g1_get_selection(struct v4l2_subdev *sd,
@@ -3052,4 +3079,7 @@ MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@foss.st.com>");
 MODULE_AUTHOR("Sylvain Petinot <sylvain.petinot@foss.st.com>");
 MODULE_AUTHOR("Peter Marshall <pm@petermarshall.ca>");
 MODULE_DESCRIPTION("VD55G1 camera subdev driver");
+MODULE_FIRMWARE("vd55g0-cut1.bin");
+MODULE_FIRMWARE("vd55g0-cut2.bin");
+MODULE_FIRMWARE("vd55g1.bin");
 MODULE_LICENSE("GPL");
