@@ -1769,6 +1769,9 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 		return ret;
 	/* Max exposure changes with vblank */
 	expo_max = sensor->frame_length - VD55G0_EXPO_MAX_TERM;
+	if (sensor->flash_en) {
+		expo_max /= 2;
+	}
 	ret = __v4l2_ctrl_modify_range(sensor->expo_ctrl, 0, expo_max, 1,
 				       VD55G0_EXPO_DEF);
 	if (ret)
